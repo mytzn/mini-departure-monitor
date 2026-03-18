@@ -1,0 +1,1755 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini Departures Setup</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <style>
+    :root {
+      --ink: #111111;
+      --paper: #ffffff;
+      --grey: #f2f2f2;
+      --grey-2: #e0e0e0;
+      --green: #017e65;
+      --green-light: #2f9c84;
+      --green-soft: #cdebe3;
+      --shadow: rgba(0, 0, 0, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top, #ffffff 0%, #f5f5f5 40%, #e9e9e9 100%);
+      min-height: 100vh;
+    }
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .page::before, .page::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      opacity: 0.65;
+      filter: blur(0px);
+      z-index: 0;
+    }
+    .page::before {
+      width: 240px;
+      height: 240px;
+      background: #dff3ee;
+      top: -60px;
+      right: -80px;
+    }
+    .page::after {
+      width: 180px;
+      height: 180px;
+      background: #eeeeee;
+      bottom: -40px;
+      left: -40px;
+    }
+    header {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 22px;
+      animation: rise 0.7s ease-out both;
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand-mark {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo {
+      width: 110px;
+      height: auto;
+      flex: 0 0 auto;
+    }
+    .brand-tagline {
+      margin: 0;
+      max-width: 660px;
+      color: #333;
+      font-size: 1.02rem;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(2, minmax(300px, 1fr));
+      position: relative;
+      z-index: 1;
+    }
+    .card {
+      background: var(--paper);
+      border-radius: 18px;
+      padding: 18px 18px 20px;
+      box-shadow: 0 14px 30px var(--shadow);
+      border: 1px solid rgba(27, 26, 23, 0.08);
+      animation: rise 0.7s ease-out both;
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1.25rem;
+    }
+    label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input, select, button, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--grey-2);
+      background: #ffffff;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: 2px solid var(--green);
+      border-color: transparent;
+    }
+    .row {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .row.inline {
+      grid-template-columns: 1fr auto;
+      align-items: end;
+    }
+    .btn {
+      background: var(--green);
+      color: #fff;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(1, 126, 101, 0.25);
+    }
+    .btn.secondary {
+      background: var(--green);
+    }
+    .btn:disabled,
+    .btn.secondary:disabled {
+      background: #c9d8d4;
+      color: #f6f6f6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+    .btn.ghost {
+      background: transparent;
+      color: var(--green);
+      border: 1px dashed rgba(1, 126, 101, 0.45);
+      box-shadow: none;
+    }
+    .network-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+    }
+    .network-grid select,
+    .network-grid button {
+      height: 44px;
+    }
+    .stations {
+      display: grid;
+      gap: 12px;
+    }
+    .instructions {
+      margin: 0 0 12px;
+      padding-left: 20px;
+      color: #333;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+    .instructions li {
+      margin-bottom: 6px;
+    }
+    .station {
+      background: var(--grey);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .station-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .station-actions button {
+      width: auto;
+      padding: 8px 12px;
+    }
+    .notice {
+      font-size: 0.9rem;
+      color: #4b4b4b;
+      margin-top: 8px;
+    }
+    .status {
+      margin-top: 10px;
+      font-weight: 600;
+      color: var(--green);
+      min-height: 20px;
+    }
+    .power-help {
+      margin: 0 0 12px;
+      color: #333;
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+    .slider-row {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .slider-value {
+      font-weight: 700;
+      color: #0d6f5b;
+    }
+    .time-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .validation-error {
+      font-size: 0.9rem;
+      color: #7f1111;
+      min-height: 18px;
+    }
+    .settings-stack {
+      display: grid;
+      gap: 14px;
+    }
+    .setting-group {
+      display: grid;
+      gap: 8px;
+    }
+    .setting-help {
+      margin: 0;
+      color: #333;
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+    .disabled-row {
+      display: grid;
+      gap: 10px;
+    }
+    .firmware-progress {
+      width: 100%;
+      height: 12px;
+      appearance: none;
+    }
+    .firmware-progress::-webkit-progress-bar {
+      background: var(--grey);
+      border-radius: 999px;
+    }
+    .firmware-progress::-webkit-progress-value {
+      background: var(--green);
+      border-radius: 999px;
+    }
+    .firmware-progress::-moz-progress-bar {
+      background: var(--green);
+      border-radius: 999px;
+    }
+    .firmware-progress-text {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #333;
+    }
+    .disabled-row input,
+    .disabled-row button {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .station-footer {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .status-block {
+      margin-top: 12px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #f7f7f7;
+      border: 1px dashed var(--green-soft);
+      display: grid;
+      gap: 6px;
+      font-size: 0.95rem;
+    }
+    .status-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .status-label {
+      color: #666;
+    }
+    .footer-note {
+      margin: 12px auto 0;
+      text-align: center;
+      font-size: 0.85rem;
+      color: #666;
+    }
+    .footer-note a {
+      color: inherit;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 10, 0.52);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 20px;
+    }
+    .modal {
+      width: min(430px, 100%);
+      background: #fff;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+      padding: 18px 18px 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .modal h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+    .modal p {
+      margin: 0;
+      line-height: 1.45;
+      color: #333;
+    }
+    .modal-countdown {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #017e65;
+      text-align: center;
+      letter-spacing: 0.03em;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .modal-actions button {
+      width: auto;
+      min-width: 110px;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 600px) {
+      .brand { align-items: flex-start; }
+      .logo { width: 90px; }
+      .grid { grid-template-columns: 1fr; }
+      .row.inline { grid-template-columns: 1fr; }
+      .network-grid { grid-template-columns: 1fr; }
+      .time-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg class="logo" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" x="0" y="0" viewBox="0 0 121 121" xml:space="preserve" role="img" data-i18n-aria-label="header.logoAriaLabel" aria-label="VRS logo">
+              <circle cx="60.5" cy="60.5" r="60.5" fill="#f2f2f2"/>
+              <path d="M20.5 28.1C30 16.5 44.5 9 60.8 9c28.6 0 51.8 23.1 51.8 51.7s-23.2 51.7-51.8 51.7c-26.7 0-48.6-20.1-51.5-45.9h67.9a19.2 19.2 0 0 0 0-38.4H20.5z" fill="#007d64"/>
+              <path d="m15.7 53.4 10.7-20.8h9.5l-16.6 30H8.9L5 32.6h8.8l1.9 20.8zM43.7 44.7h2c3.4 0 5.5-.9 5.5-3.1 0-1.7-.9-2.5-3.1-2.5h-3.3l-1.1 5.6zm9 3.5c.5.4.9 1 1.2 1.6.6 1.1.9 2.4 1.1 3.3l2.2 9.5h-8.8l-1.6-7.8c-.7-3.6-.8-3.7-4-3.7h-.4L40 62.6h-8.8l6.3-30h9.7c5.4 0 12.7.1 12.7 7.9.1 4.9-3.3 6.9-7.2 7.7M83.6 40.4l-.5-.2c-1.4-.7-3.4-1.3-6.2-1.3-1.5 0-2.9.1-3.8.5-.9.3-1.3.9-1.3 1.8 0 .7.5 1.3 1.5 1.8 1 .6 2.4 1 3.9 1.6 2.9 1.3 5.9 3.2 5.9 7.9 0 8.5-8 10.6-14.7 10.6-3.1 0-6.6-.7-9.1-1.5l-.5-.1 2.2-7 .6.4c1.4.9 4.4 1.6 6.9 1.6 1.2 0 2.7-.1 3.8-.6 1.1-.4 1.9-1.2 1.9-2.4 0-.9-.5-1.5-1.5-2.1-.5-.3-1.1-.6-1.8-.8-.7-.3-1.4-.5-2.1-.8-2.9-1.2-5.9-2.9-5.9-7.3 0-8 7-10.2 13.5-10.2 3.6 0 7 .4 9.1 1.3l.4.2-2.3 6.6z"/>
+            </svg>
+          </div>
+          <p class="brand-tagline" data-i18n="header.brandTagline">Connect your mini departure display to WiFi and configure your stops.</p>
+        </div>
+      </div>
+    </header>
+    <div class="grid">
+      <section class="card" id="wifiCard">
+        <h2 data-i18n="wifi.title">WiFi Settings</h2>
+        <ol class="instructions">
+          <li data-i18n="wifi.step1">Scan and select a WiFi network</li>
+          <li data-i18n="wifi.step2">Enter the password</li>
+          <li data-i18n="wifi.step3">Click Save &amp; Connect</li>
+        </ol>
+        <div class="status-block">
+          <div class="status-line">
+            <span class="status-label" data-i18n="wifi.savedWifiLabel">Saved WiFi</span>
+            <strong id="savedWifi">Not saved</strong>
+          </div>
+          <div class="status-line">
+            <span class="status-label" data-i18n="wifi.connectionLabel">Connection</span>
+            <strong id="wifiStatus">Checking...</strong>
+          </div>
+          <div class="status-line">
+            <span class="status-label" data-i18n="wifi.signalLabel">Signal</span>
+            <strong id="wifiSignal">-- dBm</strong>
+          </div>
+        </div>
+        <div class="row network-grid">
+          <div>
+            <label for="ssid" data-i18n="wifi.changeNetworkLabel">Change WiFi network:</label>
+            <select id="ssid"></select>
+          </div>
+          <button class="btn ghost" id="scan" type="button" data-i18n="wifi.scan">Scan</button>
+        </div>
+        <div class="row">
+          <label for="password" data-i18n="wifi.passwordLabel">WiFi Password</label>
+          <input id="password" type="password" data-i18n-placeholder="wifi.passwordPlaceholder" placeholder="" />
+        </div>
+        <p class="notice" data-i18n-html="wifi.apNotice">The setup AP stays online at <strong>mini-config</strong> while the device joins your WiFi.</p>
+        <div class="row">
+          <button class="btn secondary" id="save" data-i18n="wifi.saveConnect">Save &amp; Connect</button>
+        </div>
+        <div class="row">
+          <button class="btn ghost" id="reboot" data-i18n="wifi.reboot">Reboot Device</button>
+        </div>
+        <div class="row">
+          <button class="btn ghost" id="factoryReset" data-i18n="wifi.factoryReset">Factory Reset Device</button>
+        </div>
+        <p class="notice" data-i18n="wifi.factoryResetNotice">Resets the device to factory defaults. After reboot, the WiFi must be configured again.</p>
+        <div id="status" class="status"></div>
+      </section>
+      <section class="card" id="stationsCard" style="display:none;">
+        <h2 data-i18n="stations.title">Stops</h2>
+        <ol class="instructions">
+          <li><a href="https://www.vrs.de/fahrplanauskunft/abfahrtsmonitor" target="_blank" rel="noreferrer" data-i18n="stations.step1Link">Visit the VRS website</a></li>
+          <li data-i18n="stations.step2">Configure the departure monitor</li>
+          <li data-i18n="stations.step3">Paste the link here and name the stop</li>
+        </ol>
+        <div id="stations" class="stations"></div>
+        <div class="station-footer">
+          <button class="btn" id="saveStations" data-i18n="stations.save">Save Stops</button>
+          <button class="btn ghost" id="addStation" data-i18n="stations.add">Add Stop</button>
+          <div id="stationNotice" class="notice">You can store up to 4 stops.</div>
+        </div>
+        <div id="stationsStatus" class="status"></div>
+      </section>
+      <section class="card" id="powerCard" style="display:none;">
+        <h2 data-i18n="power.title">Power Schedule</h2>
+        <p class="power-help" data-i18n="power.help">Choose the power mode. The update interval applies to all modes.</p>
+        <div class="row">
+          <label for="powerMode" data-i18n="power.modeLabel">Power Mode</label>
+          <select id="powerMode">
+            <option value="1" data-i18n="power.modeContinuous">Continuous mode (recommended only with USB power)</option>
+            <option value="2" data-i18n="power.modeAlarm">Deep sleep with alarm</option>
+            <option value="3" data-i18n="power.modeManual">Deep sleep with manual wake-up</option>
+          </select>
+        </div>
+        <div class="slider-row">
+          <label for="updateInterval" data-i18n="power.updateIntervalLabel">Update interval (seconds)</label>
+          <input id="updateInterval" type="range" min="20" max="60" step="1" value="40" />
+          <div class="slider-value"><span id="updateIntervalValue">40</span> <span data-i18n="power.secondsSuffix">s</span></div>
+        </div>
+        <div id="manualRefreshFields" class="slider-row" style="display:none;">
+          <label for="manualRefreshCount" data-i18n="power.manualRefreshLabel">Refresh cycles before deep sleep</label>
+          <input id="manualRefreshCount" type="range" min="5" max="30" step="5" value="20" />
+          <div class="slider-value"><span id="manualRefreshCountValue">20</span> <span data-i18n="power.cyclesSuffix">cycles</span></div>
+          <div class="notice" data-i18n="power.manualRefreshHelp">Defines how many display refreshes happen after a manual wake-up before the device returns to long deep sleep.</div>
+        </div>
+        <div id="nightSleepFields" class="row">
+          <label data-i18n="power.nightRangeLabel">Night range (mode 2 only)</label>
+          <div class="time-grid">
+            <div>
+              <label for="nightSleepStart" data-i18n="power.startLabel">Start</label>
+              <input id="nightSleepStart" type="time" step="60" value="22:00" />
+            </div>
+            <div>
+              <label for="nightSleepEnd" data-i18n="power.endLabel">End</label>
+              <input id="nightSleepEnd" type="time" step="60" value="06:00" />
+            </div>
+          </div>
+        </div>
+        <div id="powerValidation" class="validation-error"></div>
+        <div class="row">
+          <button class="btn secondary" id="savePower" data-i18n="power.save">Save Power Settings</button>
+        </div>
+        <div id="powerStatus" class="status"></div>
+      </section>
+      <section class="card" id="settingsCard" style="display:none;">
+        <h2 data-i18n="settings.title">Settings</h2>
+        <div class="settings-stack">
+          <div class="setting-group">
+            <label for="languageSelect" data-i18n="meta.languageLabel">Language</label>
+            <select id="languageSelect">
+              <option value="auto" data-i18n="meta.languageAuto">Auto</option>
+              <option value="de" data-i18n="meta.languageGerman">Deutsch</option>
+              <option value="en" data-i18n="meta.languageEnglish">English</option>
+            </select>
+            <p class="setting-help" data-i18n="settings.languageHelp">Choose whether the setup page follows your browser language or a fixed language. Manual selection also updates the device screen language.</p>
+          </div>
+          <div class="setting-group">
+            <label data-i18n="settings.firmwareTitle">Firmware Update</label>
+            <p class="setting-help" data-i18n="settings.firmwareHelp">Upload a compiled firmware .bin file. The device reboots automatically after a successful update.</p>
+            <div class="disabled-row">
+              <input id="firmwareFile" type="file" accept=".bin,application/octet-stream" />
+              <button id="firmwareUpload" class="btn secondary" type="button" disabled data-i18n="settings.firmwareUpload">Upload Firmware</button>
+            </div>
+            <div id="firmwareProgressWrap" class="setting-group" style="display:none;">
+              <progress id="firmwareProgress" class="firmware-progress" max="100" value="0"></progress>
+              <p id="firmwareProgressText" class="firmware-progress-text">0%</p>
+            </div>
+            <p id="firmwareNotice" class="notice" data-i18n="settings.firmwareDisabled">Firmware upload is currently unavailable.</p>
+          </div>
+        </div>
+        <div id="settingsStatus" class="status"></div>
+      </section>
+    </div>
+    <p class="footer-note" data-i18n-html="footer.note">Mini Departures · v__APP_VERSION__ · Made by <a href="https://github.com/mytzn/" target="_blank" rel="noreferrer">@mytzn</a></p>
+  </main>
+  <div id="rebootModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rebootModalTitle">
+    <div class="modal">
+      <h3 id="rebootModalTitle" data-i18n="modal.title">Device Is Rebooting</h3>
+      <p id="rebootModalMessage" data-i18n="modal.wifiConnectedMessage">WiFi connected. The device will now reboot and connect to your WiFi.</p>
+      <div id="rebootModalCountdown" class="modal-countdown">10</div>
+      <p id="rebootModalDetail" data-i18n-html="modal.initialDetail">Reboot is being triggered...</p>
+      <div class="modal-actions">
+        <button id="rebootModalRetry" class="btn ghost" type="button" style="display:none;">Open mini.local</button>
+      </div>
+    </div>
+  </div>
+  <template id="stationTemplate">
+    <div class="station">
+      <div class="row">
+        <label class="station-name-label" data-i18n="stations.nameLabel">Name</label>
+        <input class="station-name" data-i18n-placeholder="stations.namePlaceholder" placeholder="KVB stop" />
+      </div>
+      <div class="row">
+        <label class="station-url-label" data-i18n="stations.urlLabel">Departure URL</label>
+        <input class="station-url" data-i18n-placeholder="stations.urlPlaceholder" placeholder="https://www.vrs.de/am/s/..." />
+      </div>
+      <div class="station-actions">
+        <button class="btn ghost station-remove" type="button" data-i18n="stations.remove">Remove</button>
+      </div>
+    </div>
+  </template>
+  <script>
+    const supportedLanguages = ["de", "en"];
+    const languageStorageKey = "mini_departures_language";
+    const maxStations = 4;
+    const autoRebootCountdownSeconds = 10;
+    const wifiConnectWaitMs = 45000;
+    const miniLocalWaitMs = 60000;
+    const miniLocalProbeIntervalMs = 2000;
+    const miniLocalProbeTimeoutMs = 1500;
+
+    const languageSelect = document.getElementById("languageSelect");
+    const ssidSelect = document.getElementById("ssid");
+    const passwordInput = document.getElementById("password");
+    const stationsCardEl = document.getElementById("stationsCard");
+    const powerCardEl = document.getElementById("powerCard");
+    const settingsCardEl = document.getElementById("settingsCard");
+    const stationsEl = document.getElementById("stations");
+    const statusEl = document.getElementById("status");
+    const wifiStatusEl = document.getElementById("wifiStatus");
+    const wifiSignalEl = document.getElementById("wifiSignal");
+    const savedWifiEl = document.getElementById("savedWifi");
+    const scanBtn = document.getElementById("scan");
+    const template = document.getElementById("stationTemplate");
+    const saveBtn = document.getElementById("save");
+    const saveStationsBtn = document.getElementById("saveStations");
+    const addStationBtn = document.getElementById("addStation");
+    const stationNoticeEl = document.getElementById("stationNotice");
+    const stationsStatusEl = document.getElementById("stationsStatus");
+    const factoryResetBtn = document.getElementById("factoryReset");
+    const settingsStatusEl = document.getElementById("settingsStatus");
+    const powerModeSelect = document.getElementById("powerMode");
+    const updateIntervalInput = document.getElementById("updateInterval");
+    const updateIntervalValueEl = document.getElementById("updateIntervalValue");
+    const manualRefreshFieldsEl = document.getElementById("manualRefreshFields");
+    const manualRefreshCountInput = document.getElementById("manualRefreshCount");
+    const manualRefreshCountValueEl = document.getElementById("manualRefreshCountValue");
+    const nightSleepFieldsEl = document.getElementById("nightSleepFields");
+    const nightSleepStartInput = document.getElementById("nightSleepStart");
+    const nightSleepEndInput = document.getElementById("nightSleepEnd");
+    const powerValidationEl = document.getElementById("powerValidation");
+    const savePowerBtn = document.getElementById("savePower");
+    const powerStatusEl = document.getElementById("powerStatus");
+    const firmwareFileInput = document.getElementById("firmwareFile");
+    const firmwareUploadBtn = document.getElementById("firmwareUpload");
+    const firmwareNoticeEl = document.getElementById("firmwareNotice");
+    const firmwareProgressWrapEl = document.getElementById("firmwareProgressWrap");
+    const firmwareProgressEl = document.getElementById("firmwareProgress");
+    const firmwareProgressTextEl = document.getElementById("firmwareProgressText");
+    const rebootModalOverlayEl = document.getElementById("rebootModalOverlay");
+    const rebootModalMessageEl = document.getElementById("rebootModalMessage");
+    const rebootModalCountdownEl = document.getElementById("rebootModalCountdown");
+    const rebootModalDetailEl = document.getElementById("rebootModalDetail");
+    const rebootModalRetryEl = document.getElementById("rebootModalRetry");
+
+    let translations = {};
+    let currentLanguagePreference = "auto";
+    let currentLanguage = "en";
+    let autoRebootInProgress = false;
+    let scanTimer = null;
+    let scanRunning = false;
+    let scanIndicatorTimer = null;
+    let lastWifiState = { kind: "loading" };
+    let lastStatusSnapshot = null;
+    let firmwareUploadBusy = false;
+    let firmwareRebootPending = false;
+    let firmwareReloadTimer = null;
+    let currentConfig = {
+      ssid: "",
+      stations: [],
+      uiLanguage: "de",
+      powerMode: 2,
+      updateIntervalSec: 40,
+      manualRefreshCount: 20,
+      nightSleepStart: "22:00",
+      nightSleepEnd: "06:00",
+    };
+
+    function getTranslationValue(path) {
+      return path.split(".").reduce((value, key) => {
+        if (value && Object.prototype.hasOwnProperty.call(value, key)) {
+          return value[key];
+        }
+        return undefined;
+      }, translations);
+    }
+
+    function interpolate(templateText, variables = {}) {
+      return String(templateText).replace(/\{\{(\w+)\}\}/g, (match, key) => {
+        if (Object.prototype.hasOwnProperty.call(variables, key)) {
+          return String(variables[key]);
+        }
+        return "";
+      });
+    }
+
+    function t(path, variables = {}, fallback = "") {
+      const value = getTranslationValue(path);
+      if (typeof value === "string") {
+        return interpolate(value, variables);
+      }
+      return fallback || path;
+    }
+
+    function normalizeLanguagePreference(value) {
+      if (value === "auto" || supportedLanguages.includes(value)) {
+        return value;
+      }
+      return "auto";
+    }
+
+    function normalizeDeviceLanguage(value) {
+      return value === "en" ? "en" : "de";
+    }
+
+    function detectBrowserLanguage() {
+      const languages =
+          Array.isArray(navigator.languages) && navigator.languages.length > 0
+              ? navigator.languages
+              : [navigator.language || "en"];
+      return languages.some((language) => String(language).toLowerCase().startsWith("de"))
+          ? "de"
+          : "en";
+    }
+
+    async function fetchTranslations(language) {
+      const response = await fetch(`/i18n/${language}.json`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function translationTargets(root, selector) {
+      const targets = [];
+      if (root instanceof Element && root.matches(selector)) {
+        targets.push(root);
+      }
+      if (typeof root.querySelectorAll === "function") {
+        targets.push(...root.querySelectorAll(selector));
+      }
+      return targets;
+    }
+
+    function applyTranslations(root = document) {
+      translationTargets(root, "[data-i18n]").forEach((element) => {
+        element.textContent = t(element.dataset.i18n, {}, element.textContent);
+      });
+      translationTargets(root, "[data-i18n-html]").forEach((element) => {
+        element.innerHTML = t(element.dataset.i18nHtml, {}, element.innerHTML);
+      });
+      translationTargets(root, "[data-i18n-placeholder]").forEach((element) => {
+        element.placeholder = t(
+            element.dataset.i18nPlaceholder,
+            {},
+            element.getAttribute("placeholder") || "");
+      });
+      translationTargets(root, "[data-i18n-aria-label]").forEach((element) => {
+        element.setAttribute(
+            "aria-label",
+            t(
+                element.dataset.i18nAriaLabel,
+                {},
+                element.getAttribute("aria-label") || ""));
+      });
+    }
+
+    function translateStationRow(row) {
+      applyTranslations(row);
+    }
+
+    function getStoredLanguagePreference() {
+      try {
+        const value = window.localStorage.getItem(languageStorageKey);
+        return value === null ? null : normalizeLanguagePreference(value);
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function persistLanguagePreference(preference) {
+      try {
+        window.localStorage.setItem(languageStorageKey, preference);
+      } catch (error) {
+      }
+    }
+
+    async function applyLanguage(preference, persistPreference = true) {
+      currentLanguagePreference = normalizeLanguagePreference(preference);
+      const preferredLanguage =
+          currentLanguagePreference === "auto"
+              ? detectBrowserLanguage()
+              : currentLanguagePreference;
+
+      try {
+        translations = await fetchTranslations(preferredLanguage);
+        currentLanguage = preferredLanguage;
+      } catch (error) {
+        if (preferredLanguage !== "en") {
+          translations = await fetchTranslations("en");
+          currentLanguage = "en";
+        } else {
+          translations = {};
+          currentLanguage = "en";
+        }
+      }
+
+      document.documentElement.lang = currentLanguage;
+      document.title = t("meta.title", {}, document.title);
+      applyTranslations(document);
+      languageSelect.value = currentLanguagePreference;
+      if (persistPreference) {
+        persistLanguagePreference(currentLanguagePreference);
+      }
+
+      stationsEl.querySelectorAll(".station").forEach((row) => translateStationRow(row));
+      setSavedWifi(currentConfig.ssid || "");
+      renderWifiState();
+      setScanState(scanRunning);
+      updateStationLimit();
+      updatePowerSaveState();
+      renderFirmwareState(lastStatusSnapshot);
+    }
+
+    function setStatus(message, ok = true) {
+      statusEl.textContent = message;
+      statusEl.style.color = ok ? "#017E65" : "#333333";
+    }
+
+    function setStationsStatus(message, ok = true) {
+      stationsStatusEl.textContent = message;
+      stationsStatusEl.style.color = ok ? "#017E65" : "#333333";
+    }
+
+    function setPowerStatus(message, ok = true) {
+      powerStatusEl.textContent = message;
+      powerStatusEl.style.color = ok ? "#017E65" : "#333333";
+    }
+
+    function setSettingsStatus(message, ok = true) {
+      settingsStatusEl.textContent = message;
+      settingsStatusEl.style.color = ok ? "#017E65" : "#333333";
+    }
+
+    function formatBytes(bytes) {
+      const size = Number(bytes);
+      if (!Number.isFinite(size) || size <= 0) {
+        return "0 B";
+      }
+      if (size >= (1024 * 1024)) {
+        return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+      }
+      if (size >= 1024) {
+        return `${Math.round(size / 1024)} KB`;
+      }
+      return `${Math.round(size)} B`;
+    }
+
+    function setFirmwareProgressVisible(visible) {
+      firmwareProgressWrapEl.style.display = visible ? "grid" : "none";
+    }
+
+    function setFirmwareProgress(percent, text) {
+      firmwareProgressEl.value = Math.max(0, Math.min(100, Number(percent) || 0));
+      firmwareProgressTextEl.textContent = text;
+    }
+
+    function scheduleFirmwarePageReload() {
+      if (firmwareReloadTimer) {
+        clearTimeout(firmwareReloadTimer);
+      }
+      firmwareReloadTimer = window.setTimeout(() => {
+        window.location.reload();
+      }, 15000);
+    }
+
+    function getFirmwareSelectionValidation(requireFile = false) {
+      const file = firmwareFileInput.files && firmwareFileInput.files.length > 0
+          ? firmwareFileInput.files[0]
+          : null;
+      if (!file) {
+        return {
+          ok: false,
+          file: null,
+          error: requireFile
+              ? t("settings.firmwareNoFile", {}, "Please choose a firmware file first.")
+              : "",
+        };
+      }
+
+      if (!String(file.name || "").toLowerCase().endsWith(".bin")) {
+        return {
+          ok: false,
+          file,
+          error: t("settings.firmwareInvalidFile", {}, "Please choose a .bin firmware file."),
+        };
+      }
+
+      const maxSize = Number(lastStatusSnapshot && lastStatusSnapshot.firmwareMaxSize || 0);
+      if (maxSize > 0 && file.size > maxSize) {
+        return {
+          ok: false,
+          file,
+          error: t(
+              "settings.firmwareTooLarge",
+              { size: formatBytes(maxSize) },
+              `The selected file is too large for the OTA slot (${formatBytes(maxSize)} max).`),
+        };
+      }
+
+      return { ok: true, file, error: "" };
+    }
+
+    function renderFirmwareState(statusData) {
+      const maxSize = Number(statusData && statusData.firmwareMaxSize || 0);
+      const uploadEnabled = Boolean(statusData && statusData.firmwareUploadEnabled) && maxSize > 0;
+      const rebootPending = firmwareRebootPending || Boolean(statusData && statusData.rebootPending);
+      const validation = getFirmwareSelectionValidation(false);
+
+      firmwareFileInput.disabled = !uploadEnabled || firmwareUploadBusy || rebootPending;
+      firmwareUploadBtn.disabled =
+          !uploadEnabled || firmwareUploadBusy || rebootPending || !validation.ok;
+      firmwareUploadBtn.textContent = firmwareUploadBusy
+          ? t("settings.firmwareUploadingButton", {}, "Uploading...")
+          : t("settings.firmwareUpload", {}, "Upload Firmware");
+
+      if (rebootPending) {
+        firmwareNoticeEl.textContent = t(
+            "settings.firmwareRebootPending",
+            {},
+            "The device is rebooting. The page will reload automatically.");
+        return;
+      }
+
+      if (!uploadEnabled) {
+        firmwareNoticeEl.textContent = t(
+            "settings.firmwareDisabled",
+            {},
+            "Firmware upload is currently unavailable.");
+        return;
+      }
+
+      if (validation.file && !validation.ok) {
+        firmwareNoticeEl.textContent = validation.error;
+        return;
+      }
+
+      const version = statusData && statusData.version ? `v${statusData.version}` : "v?";
+      let notice = t(
+          "settings.firmwareReady",
+          { version, size: formatBytes(maxSize) },
+          `Current version: ${version}. Max file size: ${formatBytes(maxSize)}.`);
+      if (validation.file) {
+        notice += " " + t(
+            "settings.firmwareSelected",
+            {
+              name: validation.file.name,
+              size: formatBytes(validation.file.size),
+            },
+            `${validation.file.name} (${formatBytes(validation.file.size)})`);
+      }
+      firmwareNoticeEl.textContent = notice;
+    }
+
+    function uploadFirmwareBinary(file) {
+      return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        const formData = new FormData();
+        formData.append("firmware", file, file.name);
+
+        request.open("POST", "/api/firmware");
+        request.responseType = "json";
+        request.upload.onprogress = (event) => {
+          if (!event.lengthComputable || event.total <= 0) {
+            return;
+          }
+          const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+          const progressLabel = t(
+              "settings.firmwareUploadingProgress",
+              { percent },
+              `Upload ${percent}%`);
+          setFirmwareProgress(percent, progressLabel);
+          setSettingsStatus(
+              t(
+                  "settings.firmwareUploadingStatus",
+                  { percent },
+                  `Uploading firmware (${percent}%)`));
+        };
+        request.onload = () => {
+          const fallbackError = `HTTP ${request.status}`;
+          const payload = request.response && typeof request.response === "object"
+              ? request.response
+              : (() => {
+                  try {
+                    return JSON.parse(request.responseText || "{}");
+                  } catch (error) {
+                    return null;
+                  }
+                })();
+          if (request.status >= 200 && request.status < 300 && payload && payload.ok) {
+            resolve(payload);
+            return;
+          }
+          reject(new Error(payload && payload.error ? payload.error : fallbackError));
+        };
+        request.onerror = () => {
+          reject(new Error(t("settings.firmwareNetworkError", {}, "Firmware upload failed.")));
+        };
+        request.onabort = () => {
+          reject(new Error(t("settings.firmwareAborted", {}, "Firmware upload was aborted.")));
+        };
+        request.send(formData);
+      });
+    }
+
+    function setSavedWifi(ssid) {
+      const value = ssid && ssid.trim().length > 0
+          ? ssid
+          : t("wifi.savedWifiNotSaved", {}, "Not saved");
+      savedWifiEl.textContent = value;
+      savedWifiEl.style.color = "#151515";
+    }
+
+    function updateSaveState() {
+      const hasSsid = Boolean(ssidSelect.value && ssidSelect.value.trim().length > 0);
+      const hasPassword = Boolean(passwordInput.value && passwordInput.value.trim().length > 0);
+      saveBtn.disabled = !(hasSsid && hasPassword);
+    }
+
+    function formatSignal(rssi) {
+      if (!Number.isFinite(rssi)) return t("wifi.signalUnavailable", {}, "n/a");
+      let qualityKey = "weak";
+      if (rssi >= -60) {
+        qualityKey = "excellent";
+      } else if (rssi >= -67) {
+        qualityKey = "good";
+      } else if (rssi >= -75) {
+        qualityKey = "fair";
+      }
+      return t("wifi.signalFormat", {
+        rssi,
+        quality: t(`wifi.quality.${qualityKey}`, {}, qualityKey),
+      }, `${rssi} dBm`);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function applyConnectedUiState(connected) {
+      const showAdvanced = Boolean(connected);
+      stationsCardEl.style.display = showAdvanced ? "" : "none";
+      powerCardEl.style.display = showAdvanced ? "" : "none";
+      settingsCardEl.style.display = "";
+    }
+
+    function renderWifiState() {
+      if (lastWifiState.kind === "data") {
+        const data = lastWifiState.data;
+        applyConnectedUiState(data.connected);
+        if (data.connected) {
+          const ssid = data.ssid || t("wifi.connectedFallbackSsid", {}, "connected");
+          wifiStatusEl.textContent = t("wifi.connected", { ssid }, `Connected (${ssid})`);
+          wifiStatusEl.style.color = "#017E65";
+          wifiSignalEl.textContent = formatSignal(Number(data.rssi));
+          wifiSignalEl.style.color = "#151515";
+        } else {
+          wifiStatusEl.textContent = t("wifi.notConnected", {}, "Not connected");
+          wifiStatusEl.style.color = "#333333";
+          wifiSignalEl.textContent = t("wifi.signalUnavailable", {}, "n/a");
+          wifiSignalEl.style.color = "#666";
+        }
+        return;
+      }
+
+      applyConnectedUiState(false);
+      if (lastWifiState.kind === "error") {
+        wifiStatusEl.textContent = t("wifi.statusUnavailable", {}, "Status unavailable");
+        wifiStatusEl.style.color = "#333333";
+      } else {
+        wifiStatusEl.textContent = t("wifi.checking", {}, "Checking...");
+        wifiStatusEl.style.color = "#333333";
+      }
+      wifiSignalEl.textContent = t("wifi.signalPlaceholder", {}, "-- dBm");
+      wifiSignalEl.style.color = "#666";
+    }
+
+    function openRebootModal() {
+      rebootModalRetryEl.style.display = "none";
+      rebootModalOverlayEl.style.display = "flex";
+    }
+
+    function closeRebootModal() {
+      rebootModalOverlayEl.style.display = "none";
+    }
+
+    async function fetchStatusSnapshot() {
+      const res = await fetch("/api/status", { cache: "no-store" });
+      return res.json();
+    }
+
+    async function updateWifiStatus() {
+      try {
+        const data = await fetchStatusSnapshot();
+        lastStatusSnapshot = data;
+        firmwareRebootPending = firmwareRebootPending || Boolean(data.rebootPending);
+        lastWifiState = { kind: "data", data };
+        renderWifiState();
+        renderFirmwareState(data);
+        return data;
+      } catch (err) {
+        lastStatusSnapshot = null;
+        lastWifiState = { kind: "error" };
+        renderWifiState();
+        renderFirmwareState(null);
+        return null;
+      }
+    }
+
+    async function waitForWifiConnection(expectedSsid) {
+      const startMs = Date.now();
+      while ((Date.now() - startMs) < wifiConnectWaitMs) {
+        const data = await updateWifiStatus();
+        const connected = Boolean(data && data.connected);
+        const sameSsid = !expectedSsid || (data && data.ssid === expectedSsid);
+        if (connected && sameSsid) {
+          return true;
+        }
+        await sleep(1500);
+      }
+      return false;
+    }
+
+    async function probeMiniLocalOnce() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), miniLocalProbeTimeoutMs);
+      try {
+        await fetch(`http://mini.local/api/status?t=${Date.now()}`, {
+          mode: "no-cors",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        return true;
+      } catch (err) {
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function waitForMiniLocalReachable() {
+      const startMs = Date.now();
+      while ((Date.now() - startMs) < miniLocalWaitMs) {
+        if (await probeMiniLocalOnce()) {
+          return true;
+        }
+        await sleep(miniLocalProbeIntervalMs);
+      }
+      return false;
+    }
+
+    async function runAutoRebootFlow() {
+      if (autoRebootInProgress) {
+        return;
+      }
+      autoRebootInProgress = true;
+      openRebootModal();
+      rebootModalMessageEl.textContent =
+          t("modal.wifiConnectedMessage", {}, rebootModalMessageEl.textContent);
+      rebootModalDetailEl.innerHTML =
+          t("modal.initialDetail", {}, rebootModalDetailEl.innerHTML);
+      rebootModalCountdownEl.textContent = String(autoRebootCountdownSeconds);
+
+      try {
+        await fetch("/api/reboot", { method: "POST" });
+      } catch (err) {
+        rebootModalMessageEl.textContent =
+            t("modal.rebootFailedMessage", {}, "The reboot could not be triggered.");
+        rebootModalDetailEl.innerHTML =
+            t("modal.rebootFailedDetail", {}, "Please try again.");
+        rebootModalRetryEl.textContent = t("modal.close", {}, "Close");
+        rebootModalRetryEl.style.display = "inline-flex";
+        rebootModalRetryEl.onclick = () => {
+          closeRebootModal();
+          rebootModalRetryEl.style.display = "none";
+        };
+        autoRebootInProgress = false;
+        return;
+      }
+
+      for (let i = autoRebootCountdownSeconds; i >= 0; --i) {
+        rebootModalCountdownEl.textContent = String(i);
+        rebootModalDetailEl.innerHTML =
+            t("modal.redirectCountdown", { seconds: i }, rebootModalDetailEl.innerHTML);
+        await sleep(1000);
+      }
+
+      rebootModalMessageEl.textContent =
+          t("modal.waitingMessage", {}, "Waiting for mini.local on your regular WiFi...");
+      rebootModalDetailEl.innerHTML =
+          t("modal.waitingDetail", {}, "Checking the connection. This can take up to 60 seconds.");
+      rebootModalCountdownEl.textContent = "...";
+
+      const miniReady = await waitForMiniLocalReachable();
+      if (miniReady) {
+        window.location.href = "http://mini.local";
+        return;
+      }
+
+      rebootModalMessageEl.textContent =
+          t("modal.unavailableMessage", {}, "mini.local is not reachable yet.");
+      rebootModalDetailEl.innerHTML =
+          t("modal.unavailableDetail", {}, "Please make sure your device is on the same WiFi.");
+      rebootModalCountdownEl.textContent = "--";
+      rebootModalRetryEl.textContent = t("modal.openMiniLocal", {}, "Open mini.local");
+      rebootModalRetryEl.style.display = "inline-flex";
+      rebootModalRetryEl.onclick = () => {
+        window.location.href = "http://mini.local";
+      };
+      autoRebootInProgress = false;
+    }
+
+    function updateStationLimit() {
+      const count = stationsEl.querySelectorAll(".station").length;
+      const remaining = maxStations - count;
+      addStationBtn.disabled = remaining <= 0;
+      addStationBtn.textContent = remaining <= 0
+          ? t("stations.limitReached", {}, "Limit Reached")
+          : t("stations.addMore", {}, "Add Another Stop");
+      stationNoticeEl.textContent =
+          t("stations.limitNotice", { maxStations }, `You can store up to ${maxStations} stops.`);
+    }
+
+    function addStationRow(name = "", url = "") {
+      const count = stationsEl.querySelectorAll(".station").length;
+      if (count >= maxStations) {
+        setStationsStatus(
+            t("stations.tooMany", { maxStations }, `Only ${maxStations} stops are allowed.`),
+            false);
+        return;
+      }
+
+      const node = template.content.cloneNode(true);
+      const row = node.querySelector(".station");
+      row.querySelector(".station-name").value = name;
+      row.querySelector(".station-url").value = url;
+      row.querySelector(".station-remove").addEventListener("click", () => {
+        row.remove();
+        updateStationLimit();
+      });
+      stationsEl.appendChild(node);
+      translateStationRow(row);
+      updateStationLimit();
+    }
+
+    function collectStations() {
+      const items = [];
+      stationsEl.querySelectorAll(".station").forEach((row) => {
+        const name = row.querySelector(".station-name").value.trim();
+        const url = row.querySelector(".station-url").value.trim();
+        if (name && url) items.push({ name, url });
+      });
+      return items;
+    }
+
+    function extractVrsHash(url) {
+      const legacyMatch = url.match(/\/am\/s\/([0-9a-fA-F]{32})/);
+      if (legacyMatch) return legacyMatch[1];
+      const requestMatch = url.match(/[?&]i=([0-9a-fA-F]{32})/);
+      if (requestMatch) return requestMatch[1];
+      return "";
+    }
+
+    function normalizeStationUrls(url) {
+      const hash = extractVrsHash(url);
+      if (!hash) return { abfahrtsUrl: "", requestUrl: "" };
+      return {
+        abfahrtsUrl: `https://www.vrs.de/am/s/${hash}`,
+        requestUrl: `https://www.vrs.de/index.php?eID=tx_vrsinfo_departuremonitor&i=${hash}`,
+      };
+    }
+
+    function validateStations() {
+      const items = [];
+      let hasError = false;
+      stationsEl.querySelectorAll(".station").forEach((row) => {
+        const name = row.querySelector(".station-name").value.trim();
+        const url = row.querySelector(".station-url").value.trim();
+        if (!name || !url) {
+          hasError = true;
+          return;
+        }
+        const normalized = normalizeStationUrls(url);
+        if (!normalized.abfahrtsUrl) {
+          hasError = true;
+          return;
+        }
+        row.querySelector(".station-url").value = normalized.abfahrtsUrl;
+        items.push({
+          name,
+          url: normalized.abfahrtsUrl,
+          request_url: normalized.requestUrl,
+        });
+      });
+
+      if (hasError) {
+        return {
+          error: t(
+              "stations.validationError",
+              {},
+              "Please fill in name and departure URL for every stop."),
+        };
+      }
+      return { items };
+    }
+
+    function clampInterval(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return 40;
+      return Math.min(60, Math.max(20, Math.round(num)));
+    }
+
+    function clampManualRefreshCount(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return 20;
+      const clamped = Math.min(30, Math.max(5, Math.round(num)));
+      const snapped = 5 + (Math.round((clamped - 5) / 5) * 5);
+      return Math.min(30, Math.max(5, snapped));
+    }
+
+    function updateIntervalLabel() {
+      const next = clampInterval(updateIntervalInput.value);
+      updateIntervalInput.value = String(next);
+      updateIntervalValueEl.textContent = String(next);
+    }
+
+    function updateManualRefreshLabel() {
+      const next = clampManualRefreshCount(manualRefreshCountInput.value);
+      manualRefreshCountInput.value = String(next);
+      manualRefreshCountValueEl.textContent = String(next);
+    }
+
+    function parseClock24h(value) {
+      if (typeof value !== "string") return null;
+      const text = value.trim();
+      if (!/^\d{2}:\d{2}$/.test(text)) return null;
+      const hour = Number(text.slice(0, 2));
+      const minute = Number(text.slice(3, 5));
+      if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return { hour, minute };
+    }
+
+    function mapNightMinuteToLinear(minutesOfDay) {
+      if (!Number.isInteger(minutesOfDay) || minutesOfDay < 0 || minutesOfDay >= 1440) {
+        return null;
+      }
+      if (minutesOfDay >= 1320) return minutesOfDay - 1320;
+      if (minutesOfDay <= 360) return minutesOfDay + 120;
+      return null;
+    }
+
+    function validatePowerSettings(showError = false) {
+      const powerMode = Number(powerModeSelect.value || "2");
+      const updateIntervalSec = clampInterval(updateIntervalInput.value);
+      const payload = {
+        powerMode,
+        updateIntervalSec,
+        manualRefreshCount: clampManualRefreshCount(manualRefreshCountInput.value),
+        nightSleepStart: (nightSleepStartInput.value || "").trim(),
+        nightSleepEnd: (nightSleepEndInput.value || "").trim(),
+      };
+
+      if (powerMode !== 2) {
+        powerValidationEl.textContent = "";
+        return { ok: true, payload };
+      }
+
+      const start = parseClock24h(payload.nightSleepStart);
+      const end = parseClock24h(payload.nightSleepEnd);
+      if (!start || !end) {
+        const error = t("power.timeFormatError", {}, "Start/end must be in HH:MM format.");
+        if (showError) powerValidationEl.textContent = error;
+        return { ok: false, error };
+      }
+
+      const startLinear = mapNightMinuteToLinear(start.hour * 60 + start.minute);
+      const endLinear = mapNightMinuteToLinear(end.hour * 60 + end.minute);
+      if (startLinear === null || endLinear === null) {
+        const error = t(
+            "power.nightWindowError",
+            {},
+            "Start/end must be inside the night window 22:00-06:00.");
+        if (showError) powerValidationEl.textContent = error;
+        return { ok: false, error };
+      }
+
+      if (startLinear > endLinear) {
+        const error = t(
+            "power.invalidRangeError",
+            {},
+            "Invalid range: examples are 22:00-06:00 or 23:30-05:00.");
+        if (showError) powerValidationEl.textContent = error;
+        return { ok: false, error };
+      }
+
+      powerValidationEl.textContent = "";
+      return { ok: true, payload };
+    }
+
+    function updatePowerModeFieldVisibility() {
+      const powerMode = Number(powerModeSelect.value || "2");
+      nightSleepFieldsEl.style.display = powerMode === 2 ? "grid" : "none";
+      manualRefreshFieldsEl.style.display = powerMode === 3 ? "grid" : "none";
+      if (powerMode !== 2) {
+        powerValidationEl.textContent = "";
+      }
+    }
+
+    function updatePowerSaveState() {
+      updateIntervalLabel();
+      updateManualRefreshLabel();
+      updatePowerModeFieldVisibility();
+      const valid = validatePowerSettings(true);
+      savePowerBtn.disabled = !valid.ok;
+    }
+
+    function applyPowerConfigToForm(cfg) {
+      const powerMode = Number(cfg.powerMode || 2);
+      const updateIntervalSec = clampInterval(cfg.updateIntervalSec || 40);
+      const manualRefreshCount = clampManualRefreshCount(cfg.manualRefreshCount || 20);
+      const nightSleepStart =
+          typeof cfg.nightSleepStart === "string" ? cfg.nightSleepStart : "22:00";
+      const nightSleepEnd =
+          typeof cfg.nightSleepEnd === "string" ? cfg.nightSleepEnd : "06:00";
+      powerModeSelect.value = String(powerMode);
+      updateIntervalInput.value = String(updateIntervalSec);
+      manualRefreshCountInput.value = String(manualRefreshCount);
+      nightSleepStartInput.value = nightSleepStart;
+      nightSleepEndInput.value = nightSleepEnd;
+      updatePowerSaveState();
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch("/api/config");
+        const data = await res.json();
+        currentConfig = {
+          ...currentConfig,
+          ...data,
+          uiLanguage: normalizeDeviceLanguage(data.uiLanguage || currentConfig.uiLanguage),
+          updateIntervalSec: clampInterval(data.updateIntervalSec || currentConfig.updateIntervalSec),
+          manualRefreshCount: clampManualRefreshCount(
+              data.manualRefreshCount || currentConfig.manualRefreshCount),
+        };
+        if (getStoredLanguagePreference() === null) {
+          await applyLanguage(currentConfig.uiLanguage, false);
+        }
+        setSavedWifi(currentConfig.ssid || "");
+        passwordInput.value = "";
+        stationsEl.innerHTML = "";
+        if (Array.isArray(data.stations)) {
+          data.stations.forEach((station) => addStationRow(station.name, station.url));
+        }
+        if (!Array.isArray(data.stations) || data.stations.length === 0) {
+          addStationRow();
+        }
+        updateStationLimit();
+        updateSaveState();
+        applyPowerConfigToForm(currentConfig);
+        setPowerStatus("");
+        setSettingsStatus("");
+      } catch (err) {
+        setStatus(t("common.failedToLoadConfig", {}, "Failed to load configuration."), false);
+      }
+    }
+
+    function setScanState(running) {
+      scanRunning = running;
+      scanBtn.disabled = running;
+      scanBtn.textContent = running
+          ? t("wifi.scanning", {}, "Scanning...")
+          : t("wifi.scan", {}, "Scan");
+    }
+
+    function startScanIndicator() {
+      if (scanIndicatorTimer) return;
+      let dots = 0;
+      scanIndicatorTimer = setInterval(() => {
+        dots = (dots % 3) + 1;
+        setStatus(t("wifi.statusScanProgress", { dots: ".".repeat(dots) }, "WiFi scan in progress"));
+      }, 500);
+    }
+
+    function stopScanIndicator() {
+      if (!scanIndicatorTimer) return;
+      clearInterval(scanIndicatorTimer);
+      scanIndicatorTimer = null;
+    }
+
+    async function scanNetworks(isPoll = false) {
+      if (scanRunning && !isPoll) {
+        console.debug("[WiFi] scan request ignored because a scan is already running");
+        setStatus(t("wifi.statusScanRunning", {}, "WiFi scan already in progress..."));
+        return;
+      }
+      if (scanTimer) {
+        clearTimeout(scanTimer);
+        scanTimer = null;
+      }
+      console.debug(`[WiFi] scanNetworks called (isPoll=${isPoll})`);
+      setScanState(true);
+      if (!isPoll) {
+        setStatus(t("wifi.statusScanStarting", {}, "Starting WiFi scan..."));
+      }
+      startScanIndicator();
+      try {
+        const res = await fetch("/api/scan", { cache: "no-store" });
+        const data = await res.json();
+        console.debug("[WiFi] /api/scan payload:", data);
+        if (!res.ok || (data && data.ok === false)) {
+          const errMsg =
+              (data && typeof data.error === "string" && data.error.length > 0)
+                  ? data.error
+                  : `HTTP ${res.status}`;
+          throw new Error(errMsg);
+        }
+        if (data.in_progress) {
+          console.debug("[WiFi] scan in progress, polling again in 800ms");
+          scanTimer = setTimeout(() => scanNetworks(true), 800);
+          return;
+        }
+        ssidSelect.innerHTML = "";
+        const set = new Set(data.networks || []);
+        if (currentConfig.ssid) set.add(currentConfig.ssid);
+        [...set].forEach((ssid) => {
+          const opt = document.createElement("option");
+          opt.value = ssid;
+          opt.textContent = ssid;
+          if (ssid === currentConfig.ssid) opt.selected = true;
+          ssidSelect.appendChild(opt);
+        });
+        stopScanIndicator();
+        setStatus(t("wifi.statusScanComplete", { count: set.size }, `Scan complete (${set.size})`));
+        console.info(`[WiFi] scan completed with ${set.size} network(s)`);
+        setScanState(false);
+        updateSaveState();
+      } catch (err) {
+        console.error("[WiFi] scan failed:", err);
+        stopScanIndicator();
+        setStatus(
+            t(
+                "wifi.statusScanFailed",
+                { error: err && err.message ? err.message : t("common.unknownError", {}, "unknown error") },
+                "Scan failed"),
+            false);
+        setScanState(false);
+        updateSaveState();
+      }
+    }
+
+    addStationBtn.addEventListener("click", () => addStationRow());
+    ssidSelect.addEventListener("change", updateSaveState);
+    passwordInput.addEventListener("input", updateSaveState);
+    powerModeSelect.addEventListener("change", updatePowerSaveState);
+    updateIntervalInput.addEventListener("input", updatePowerSaveState);
+    manualRefreshCountInput.addEventListener("input", updatePowerSaveState);
+    nightSleepStartInput.addEventListener("input", updatePowerSaveState);
+    nightSleepEndInput.addEventListener("input", updatePowerSaveState);
+    firmwareFileInput.addEventListener("change", () => {
+      const validation = getFirmwareSelectionValidation(false);
+      if (validation.file && !validation.ok) {
+        setSettingsStatus(validation.error, false);
+      } else if (!firmwareUploadBusy && !firmwareRebootPending) {
+        setSettingsStatus("");
+      }
+      renderFirmwareState(lastStatusSnapshot);
+    });
+    firmwareUploadBtn.addEventListener("click", async () => {
+      if (firmwareUploadBusy || firmwareRebootPending) {
+        return;
+      }
+
+      const validation = getFirmwareSelectionValidation(true);
+      if (!validation.ok) {
+        setSettingsStatus(validation.error, false);
+        renderFirmwareState(lastStatusSnapshot);
+        return;
+      }
+
+      firmwareUploadBusy = true;
+      setFirmwareProgressVisible(true);
+      setFirmwareProgress(
+          0,
+          t("settings.firmwareUploadingProgress", { percent: 0 }, "Upload 0%"));
+      setSettingsStatus(
+          t("settings.firmwareUploadingStatus", { percent: 0 }, "Uploading firmware (0%)"));
+      renderFirmwareState(lastStatusSnapshot);
+
+      try {
+        await uploadFirmwareBinary(validation.file);
+        firmwareUploadBusy = false;
+        firmwareRebootPending = true;
+        if (lastStatusSnapshot) {
+          lastStatusSnapshot = { ...lastStatusSnapshot, rebootPending: true };
+        }
+        setFirmwareProgress(
+            100,
+            t("settings.firmwareUploadComplete", {}, "Upload complete. Device is rebooting..."));
+        setSettingsStatus(
+            t(
+                "settings.firmwareReloadScheduled",
+                {},
+                "Firmware uploaded. The page will reload automatically after the reboot."));
+        renderFirmwareState(lastStatusSnapshot);
+        scheduleFirmwarePageReload();
+      } catch (error) {
+        firmwareUploadBusy = false;
+        setFirmwareProgressVisible(false);
+        setSettingsStatus(
+            t(
+                "settings.firmwareUploadFailed",
+                { error: error && error.message ? error.message : t("common.unknownError", {}, "unknown error") },
+                "Firmware upload failed"),
+            false);
+        renderFirmwareState(lastStatusSnapshot);
+      }
+    });
+    languageSelect.addEventListener("change", async () => {
+      const preference = normalizeLanguagePreference(languageSelect.value);
+      await applyLanguage(preference);
+      const deviceLanguage =
+          preference === "auto" ? normalizeDeviceLanguage(currentLanguage) : preference;
+      setSettingsStatus(t("settings.statusSaving", {}, "Saving language setting..."));
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uiLanguage: deviceLanguage }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentConfig.uiLanguage = deviceLanguage;
+          setSettingsStatus(t("settings.statusSaved", {}, "Language saved."));
+        } else {
+          setSettingsStatus(data.error || t("settings.statusSaveFailed", {}, "Saving failed"), false);
+        }
+      } catch (err) {
+        setSettingsStatus(t("settings.statusSaveFailed", {}, "Saving failed"), false);
+      }
+    });
+    saveStationsBtn.addEventListener("click", async () => {
+      setStationsStatus(t("stations.saveInProgress", {}, "Saving stops..."));
+      const validation = validateStations();
+      if (validation.error) {
+        setStationsStatus(validation.error, false);
+        return;
+      }
+      const payload = {
+        stations: validation.items || [],
+      };
+      const requestLog = payload.stations.map((station) => ({
+        name: station.name,
+        request_url: station.request_url,
+      }));
+      console.log("Saving stations", requestLog);
+      try {
+        const res = await fetch("/api/stations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentConfig.stations = payload.stations;
+          setStationsStatus(t("stations.saved", {}, "Stops saved."));
+        } else {
+          setStationsStatus(data.error || t("stations.saveFailed", {}, "Saving failed"), false);
+        }
+      } catch (err) {
+        setStationsStatus(t("stations.saveFailed", {}, "Saving failed"), false);
+      }
+    });
+    savePowerBtn.addEventListener("click", async () => {
+      const validation = validatePowerSettings(true);
+      if (!validation.ok) {
+        setPowerStatus(t("power.correctSettings", {}, "Please correct the power settings."), false);
+        updatePowerSaveState();
+        return;
+      }
+      setPowerStatus(t("power.saveInProgress", {}, "Saving power settings..."));
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validation.payload),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentConfig = { ...currentConfig, ...validation.payload };
+          applyPowerConfigToForm(currentConfig);
+          setPowerStatus(t("power.saved", {}, "Power settings saved."));
+        } else {
+          if (typeof data.error === "string" && data.error.includes("night")) {
+            validatePowerSettings(true);
+          }
+          setPowerStatus(data.error || t("power.saveFailed", {}, "Saving failed"), false);
+        }
+      } catch (err) {
+        setPowerStatus(t("power.saveFailed", {}, "Saving failed"), false);
+      }
+      updatePowerSaveState();
+    });
+    scanBtn.addEventListener("click", () => {
+      console.info("[WiFi] scan button clicked");
+      setStatus(t("wifi.statusScanStarting", {}, "Starting WiFi scan..."));
+      scanNetworks(false);
+    });
+    saveBtn.addEventListener("click", async () => {
+      if (autoRebootInProgress) {
+        return;
+      }
+      setStatus(t("wifi.statusSaving", {}, "Saving..."));
+      const payload = {
+        ssid: ssidSelect.value || "",
+        password: passwordInput.value,
+      };
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          currentConfig = { ...currentConfig, ...payload };
+          passwordInput.value = "";
+          setSavedWifi(payload.ssid);
+          updateSaveState();
+          setStatus(t("wifi.statusSavedConnecting", {}, "Saved. Connecting to WiFi..."));
+          const connected = await waitForWifiConnection(payload.ssid);
+          if (connected) {
+            setStatus(
+                t("wifi.statusConnectedPreparingReboot", {}, "WiFi connected. Preparing reboot..."));
+            await runAutoRebootFlow();
+          } else {
+            setStatus(
+                t(
+                    "wifi.statusConnectionPending",
+                    {},
+                    "WiFi connection is not successful yet. Please verify the settings."),
+                false);
+          }
+        } else {
+          setStatus(data.error || t("wifi.statusSaveFailed", {}, "Save failed"), false);
+        }
+      } catch (err) {
+        setStatus(t("wifi.statusSaveFailed", {}, "Save failed"), false);
+      }
+    });
+    document.getElementById("reboot").addEventListener("click", async () => {
+      if (!confirm(t("wifi.confirmReboot", {}, "Reboot the device now?"))) return;
+      setStatus(t("wifi.statusRebooting", {}, "Rebooting..."));
+      try {
+        await fetch("/api/reboot", { method: "POST" });
+        setStatus(t("wifi.statusRebootingDevice", {}, "Rebooting device..."));
+      } catch (err) {
+        setStatus(t("wifi.statusRebootFailed", {}, "Reboot failed"), false);
+      }
+    });
+    factoryResetBtn.addEventListener("click", async () => {
+      if (!confirm(t("wifi.confirmFactoryReset", {}, "Reset the device to factory defaults now?"))) {
+        return;
+      }
+      setStatus(t("wifi.statusFactoryResetting", {}, "Resetting to factory settings..."));
+      try {
+        await fetch("/api/factory_reset", { method: "POST" });
+        setStatus(t("wifi.statusFactoryResetComplete", {}, "Factory reset complete. Rebooting..."));
+      } catch (err) {
+        setStatus(t("wifi.statusFactoryResetFailed", {}, "Factory reset failed"), false);
+      }
+    });
+
+    async function initializePage() {
+      renderWifiState();
+      renderFirmwareState(null);
+      updateSaveState();
+      updatePowerSaveState();
+      const storedPreference = getStoredLanguagePreference();
+      await applyLanguage(
+          storedPreference === null ? detectBrowserLanguage() : storedPreference,
+          storedPreference !== null);
+      await loadConfig();
+      applyConnectedUiState(false);
+      updateWifiStatus();
+      setInterval(updateWifiStatus, 5000);
+    }
+
+    initializePage();
+  </script>
+</body>
+</html>

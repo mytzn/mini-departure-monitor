@@ -1,0 +1,6 @@
+; Copy this file to platformio.local.ini for machine-specific settings.
+; platformio.local.ini is ignored by git and loaded automatically by platformio.ini.
+
+[env:seeed_xiao_esp32s3]
+upload_port = /dev/cu.usbmodem*
+monitor_port = /dev/cu.usbmodem*
