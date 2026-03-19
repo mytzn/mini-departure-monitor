@@ -1,4 +1,4 @@
-# ePaper VRS Departure Monitor
+# Train/Bus Mini Departure Monitor
 
 This project turns a small ESP32-based ePaper device into a dedicated public transit departure board for your home or desk. Instead of unlocking a phone, searching Google, or opening a transit app every time you want to check the next tram, bus, or train, the display shows the next departures at a glance with very low power consumption.
 

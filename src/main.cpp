@@ -497,6 +497,8 @@ bool setup_services_active = false;
 bool captive_portal_dns_active = false;
 bool sleep_refresh_done = false;
 bool woke_by_button = false;
+bool woke_by_setup_key = false;
+bool woke_by_sleep_key = false;
 bool woke_from_hold_sleep = false;
 bool manual_hold_sleep_requested = false;
 bool boot_was_not_from_deep_sleep = false;
@@ -4224,6 +4226,8 @@ void runContinuousPowerLoop(bool mode_changed) {
       refresh_requested = true;
     }
     woke_by_button = false;
+    woke_by_setup_key = false;
+    woke_by_sleep_key = false;
   }
   if (woke_from_hold_sleep) {
     woke_from_hold_sleep = false;
@@ -4261,8 +4265,9 @@ void runSleepModeLoop(bool mode_changed) {
     }
 
     const bool wake_by_button = woke_by_button;
+    const bool wake_by_setup = woke_by_setup_key;
     const bool wake_by_hold_sleep = woke_from_hold_sleep;
-    const bool wake_by_user = wake_by_button || wake_by_hold_sleep;
+    const bool wake_by_user = wake_by_button || wake_by_setup || wake_by_hold_sleep;
     if (wake_by_button) {
       cycleStationIfAvailable(station_count);
     }
@@ -4329,6 +4334,8 @@ void runSleepModeLoop(bool mode_changed) {
     }
     sleep_refresh_done = true;
     woke_by_button = false;
+    woke_by_setup_key = false;
+    woke_by_sleep_key = false;
     woke_from_hold_sleep = false;
     boot_was_not_from_deep_sleep = false;
   }
@@ -4407,6 +4414,8 @@ void setup() {
   applyModeFromWakeSource();
   force_ntp_sync_once = rtc_force_ntp_sync_pending != 0;
   woke_by_button = wasWokenByButton();
+  woke_by_setup_key = wasWokenByKey(kPinKeySetup);
+  woke_by_sleep_key = wasWokenByKey(kPinKeySleep);
   woke_from_hold_sleep =
       wake_cause == ESP_SLEEP_WAKEUP_EXT1 && rtc_hold_sleep_active != 0;
   rtc_hold_sleep_active = 0;
@@ -4511,6 +4520,8 @@ void loop() {
   if (mode_changed && current_mode != DeviceMode::Sleep) {
     ensureSetupServicesRunning();
     woke_by_button = false;
+    woke_by_setup_key = false;
+    woke_by_sleep_key = false;
   }
   if (force_setup_screen && current_mode == DeviceMode::Sleep) {
     current_mode = DeviceMode::Setup;
@@ -4530,6 +4541,8 @@ void loop() {
     return;
   }
   woke_by_button = false;
+  woke_by_setup_key = false;
+  woke_by_sleep_key = false;
   woke_from_hold_sleep = false;
 
   const bool wifi_connected = WiFi.status() == WL_CONNECTED;
