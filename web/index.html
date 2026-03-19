@@ -280,8 +280,8 @@
       font-size: 0.9rem;
       color: #333;
     }
-    .disabled-row input,
-    .disabled-row button {
+    .disabled-row input:disabled,
+    .disabled-row button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
@@ -481,11 +481,11 @@
           <div class="time-grid">
             <div>
               <label for="nightSleepStart" data-i18n="power.startLabel">Start</label>
-              <input id="nightSleepStart" type="time" step="60" value="22:00" />
+              <input id="nightSleepStart" type="time" step="60" value="18:00" />
             </div>
             <div>
               <label for="nightSleepEnd" data-i18n="power.endLabel">End</label>
-              <input id="nightSleepEnd" type="time" step="60" value="06:00" />
+              <input id="nightSleepEnd" type="time" step="60" value="09:00" />
             </div>
           </div>
         </div>
@@ -508,17 +508,26 @@
             <p class="setting-help" data-i18n="settings.languageHelp">Choose whether the setup page follows your browser language or a fixed language. Manual selection also updates the device screen language.</p>
           </div>
           <div class="setting-group">
-            <label data-i18n="settings.firmwareTitle">Firmware Update</label>
-            <p class="setting-help" data-i18n="settings.firmwareHelp">Upload a compiled firmware .bin file. The device reboots automatically after a successful update.</p>
+            <label data-i18n="settings.manualFirmwareTitle">Manual Firmware Update</label>
+            <p class="setting-help" data-i18n="settings.manualFirmwareHelp">Upload a compiled firmware .bin file manually. The device reboots automatically after a successful update.</p>
             <div class="disabled-row">
               <input id="firmwareFile" type="file" accept=".bin,application/octet-stream" />
               <button id="firmwareUpload" class="btn secondary" type="button" disabled data-i18n="settings.firmwareUpload">Upload Firmware</button>
             </div>
-            <div id="firmwareProgressWrap" class="setting-group" style="display:none;">
-              <progress id="firmwareProgress" class="firmware-progress" max="100" value="0"></progress>
-              <p id="firmwareProgressText" class="firmware-progress-text">0%</p>
-            </div>
             <p id="firmwareNotice" class="notice" data-i18n="settings.firmwareDisabled">Firmware upload is currently unavailable.</p>
+          </div>
+          <div class="setting-group">
+            <label data-i18n="settings.onlineFirmwareTitle">Online Firmware Update</label>
+            <p class="setting-help" data-i18n="settings.onlineFirmwareHelp">Check the latest GitHub release and let the device download and install it automatically. The device reboots automatically after a successful update.</p>
+            <div class="disabled-row">
+              <button id="firmwareReleaseCheck" class="btn ghost" type="button" disabled data-i18n="settings.firmwareCheck">Check for Update</button>
+              <button id="firmwareReleaseInstall" class="btn secondary" type="button" disabled data-i18n="settings.firmwareInstallLatest">Install Latest Release</button>
+            </div>
+            <p id="firmwareReleaseNotice" class="notice" data-i18n="settings.firmwareReleaseUnknown">Latest release not checked yet.</p>
+          </div>
+          <div id="firmwareProgressWrap" class="setting-group" style="display:none;">
+            <progress id="firmwareProgress" class="firmware-progress" max="100" value="0"></progress>
+            <p id="firmwareProgressText" class="firmware-progress-text">0%</p>
           </div>
         </div>
         <div id="settingsStatus" class="status"></div>
@@ -596,6 +605,9 @@
     const powerStatusEl = document.getElementById("powerStatus");
     const firmwareFileInput = document.getElementById("firmwareFile");
     const firmwareUploadBtn = document.getElementById("firmwareUpload");
+    const firmwareReleaseCheckBtn = document.getElementById("firmwareReleaseCheck");
+    const firmwareReleaseInstallBtn = document.getElementById("firmwareReleaseInstall");
+    const firmwareReleaseNoticeEl = document.getElementById("firmwareReleaseNotice");
     const firmwareNoticeEl = document.getElementById("firmwareNotice");
     const firmwareProgressWrapEl = document.getElementById("firmwareProgressWrap");
     const firmwareProgressEl = document.getElementById("firmwareProgress");
@@ -615,7 +627,10 @@
     let scanIndicatorTimer = null;
     let lastWifiState = { kind: "loading" };
     let lastStatusSnapshot = null;
+    let lastReleaseSnapshot = null;
     let firmwareUploadBusy = false;
+    let firmwareReleaseBusy = false;
+    let firmwareReleaseInstallBusy = false;
     let firmwareRebootPending = false;
     let firmwareReloadTimer = null;
     let currentConfig = {
@@ -625,8 +640,8 @@
       powerMode: 2,
       updateIntervalSec: 40,
       manualRefreshCount: 20,
-      nightSleepStart: "22:00",
-      nightSleepEnd: "06:00",
+      nightSleepStart: "18:00",
+      nightSleepEnd: "09:00",
     };
 
     function getTranslationValue(path) {
@@ -809,12 +824,28 @@
       return `${Math.round(size)} B`;
     }
 
+    function formatVersionLabel(version) {
+      const value = String(version || "").trim();
+      if (!value) {
+        return "v?";
+      }
+      return value.toLowerCase().startsWith("v") ? value : `v${value}`;
+    }
+
     function setFirmwareProgressVisible(visible) {
       firmwareProgressWrapEl.style.display = visible ? "grid" : "none";
     }
 
     function setFirmwareProgress(percent, text) {
+      firmwareProgressEl.setAttribute(
+          "value",
+          String(Math.max(0, Math.min(100, Number(percent) || 0))));
       firmwareProgressEl.value = Math.max(0, Math.min(100, Number(percent) || 0));
+      firmwareProgressTextEl.textContent = text;
+    }
+
+    function setFirmwareProgressIndeterminate(text) {
+      firmwareProgressEl.removeAttribute("value");
       firmwareProgressTextEl.textContent = text;
     }
 
@@ -864,21 +895,123 @@
       return { ok: true, file, error: "" };
     }
 
+    function buildFirmwareReleaseNotice(statusData) {
+      const currentVersion = formatVersionLabel(
+          (lastReleaseSnapshot && lastReleaseSnapshot.currentVersion) ||
+          (statusData && statusData.version) ||
+          "");
+
+      if (!lastReleaseSnapshot) {
+        return t(
+            "settings.firmwareReleaseUnknown",
+            {},
+            "Latest release not checked yet.");
+      }
+
+      if (!lastReleaseSnapshot.ok) {
+        return t(
+            "settings.firmwareReleaseCheckFailed",
+            {
+              error: lastReleaseSnapshot.error ||
+                  t("common.unknownError", {}, "unknown error"),
+            },
+            `Release check failed: ${lastReleaseSnapshot.error || "unknown error"}`);
+      }
+
+      const latestVersion = formatVersionLabel(lastReleaseSnapshot.latestVersion || "");
+      const assetName = lastReleaseSnapshot.assetName || "";
+      const assetSize = formatBytes(lastReleaseSnapshot.assetSize || 0);
+
+      if (lastReleaseSnapshot.installReady) {
+        return t(
+            "settings.firmwareReleaseAvailable",
+            {
+              current: currentVersion,
+              latest: latestVersion,
+              name: assetName,
+              size: assetSize,
+            },
+            `Update available: ${currentVersion} -> ${latestVersion} (${assetName}, ${assetSize}).`);
+      }
+
+      if (lastReleaseSnapshot.currentIsNewer) {
+        return t(
+            "settings.firmwareReleaseCurrentNewer",
+            {
+              current: currentVersion,
+              latest: latestVersion,
+            },
+            `Installed firmware ${currentVersion} is newer than the latest published release ${latestVersion}.`);
+      }
+
+      if (lastReleaseSnapshot.updateAvailable) {
+        return t(
+            "settings.firmwareReleaseUnavailableReason",
+            {
+              reason: lastReleaseSnapshot.message ||
+                  t("common.unknownError", {}, "unknown error"),
+            },
+            `Latest release cannot be installed: ${lastReleaseSnapshot.message || "unknown error"}`);
+      }
+
+      if (lastReleaseSnapshot.latestVersion) {
+        return t(
+            "settings.firmwareReleaseCurrent",
+            {
+              current: currentVersion,
+              latest: latestVersion,
+            },
+            `Current firmware ${currentVersion} is already up to date with ${latestVersion}.`);
+      }
+
+      if (lastReleaseSnapshot.message) {
+        return t(
+            "settings.firmwareReleaseUnavailableReason",
+            { reason: lastReleaseSnapshot.message },
+            `Latest release cannot be installed: ${lastReleaseSnapshot.message}`);
+      }
+
+      return t(
+          "settings.firmwareReleaseUnknown",
+          {},
+          "Latest release not checked yet.");
+    }
+
     function renderFirmwareState(statusData) {
       const maxSize = Number(statusData && statusData.firmwareMaxSize || 0);
       const uploadEnabled = Boolean(statusData && statusData.firmwareUploadEnabled) && maxSize > 0;
+      const firmwareBusy = firmwareUploadBusy || firmwareReleaseBusy;
       const rebootPending = firmwareRebootPending || Boolean(statusData && statusData.rebootPending);
       const validation = getFirmwareSelectionValidation(false);
+      const installReady = Boolean(
+          lastReleaseSnapshot &&
+          lastReleaseSnapshot.ok &&
+          lastReleaseSnapshot.installReady);
 
-      firmwareFileInput.disabled = !uploadEnabled || firmwareUploadBusy || rebootPending;
+      firmwareFileInput.disabled = !uploadEnabled || firmwareBusy || rebootPending;
       firmwareUploadBtn.disabled =
-          !uploadEnabled || firmwareUploadBusy || rebootPending || !validation.ok;
+          !uploadEnabled || firmwareBusy || rebootPending || !validation.ok;
       firmwareUploadBtn.textContent = firmwareUploadBusy
           ? t("settings.firmwareUploadingButton", {}, "Uploading...")
           : t("settings.firmwareUpload", {}, "Upload Firmware");
+      firmwareReleaseCheckBtn.disabled =
+          !uploadEnabled || firmwareBusy || rebootPending;
+      firmwareReleaseInstallBtn.disabled =
+          !uploadEnabled || firmwareBusy || rebootPending || !installReady;
+      firmwareReleaseCheckBtn.textContent = (
+          firmwareReleaseBusy && !firmwareReleaseInstallBusy)
+          ? t("settings.firmwareCheckingButton", {}, "Checking...")
+          : t("settings.firmwareCheck", {}, "Check for Update");
+      firmwareReleaseInstallBtn.textContent = firmwareReleaseInstallBusy
+          ? t("settings.firmwareInstallingButton", {}, "Installing...")
+          : t("settings.firmwareInstallLatest", {}, "Install Latest Release");
 
       if (rebootPending) {
         firmwareNoticeEl.textContent = t(
+            "settings.firmwareRebootPending",
+            {},
+            "The device is rebooting. The page will reload automatically.");
+        firmwareReleaseNoticeEl.textContent = t(
             "settings.firmwareRebootPending",
             {},
             "The device is rebooting. The page will reload automatically.");
@@ -890,29 +1023,46 @@
             "settings.firmwareDisabled",
             {},
             "Firmware upload is currently unavailable.");
+        firmwareReleaseNoticeEl.textContent = t(
+            "settings.firmwareDisabled",
+            {},
+            "Firmware upload is currently unavailable.");
         return;
       }
 
       if (validation.file && !validation.ok) {
         firmwareNoticeEl.textContent = validation.error;
-        return;
+      } else {
+        const version = statusData && statusData.version ? formatVersionLabel(statusData.version) : "v?";
+        let notice = t(
+            "settings.firmwareReady",
+            { version, size: formatBytes(maxSize) },
+            `Current version: ${version}. Max file size: ${formatBytes(maxSize)}.`);
+        if (validation.file) {
+          notice += " " + t(
+              "settings.firmwareSelected",
+              {
+                name: validation.file.name,
+                size: formatBytes(validation.file.size),
+              },
+              `${validation.file.name} (${formatBytes(validation.file.size)})`);
+        }
+        firmwareNoticeEl.textContent = notice;
       }
 
-      const version = statusData && statusData.version ? `v${statusData.version}` : "v?";
-      let notice = t(
-          "settings.firmwareReady",
-          { version, size: formatBytes(maxSize) },
-          `Current version: ${version}. Max file size: ${formatBytes(maxSize)}.`);
-      if (validation.file) {
-        notice += " " + t(
-            "settings.firmwareSelected",
-            {
-              name: validation.file.name,
-              size: formatBytes(validation.file.size),
-            },
-            `${validation.file.name} (${formatBytes(validation.file.size)})`);
+      if (firmwareReleaseInstallBusy) {
+        firmwareReleaseNoticeEl.textContent = t(
+            "settings.firmwareInstallingStatus",
+            {},
+            "Downloading and installing the latest release...");
+      } else if (firmwareReleaseBusy) {
+        firmwareReleaseNoticeEl.textContent = t(
+            "settings.firmwareCheckingStatus",
+            {},
+            "Checking the latest release...");
+      } else {
+        firmwareReleaseNoticeEl.textContent = buildFirmwareReleaseNotice(statusData);
       }
-      firmwareNoticeEl.textContent = notice;
     }
 
     function uploadFirmwareBinary(file) {
@@ -964,6 +1114,30 @@
         };
         request.send(formData);
       });
+    }
+
+    async function fetchFirmwareReleaseInfo() {
+      const response = await fetch("/api/firmware/release", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) {
+        throw new Error(
+            data && data.error
+                ? data.error
+                : `HTTP ${response.status}`);
+      }
+      return data;
+    }
+
+    async function installLatestFirmwareRelease() {
+      const response = await fetch("/api/firmware/release/install", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) {
+        throw new Error(
+            data && data.error
+                ? data.error
+                : `HTTP ${response.status}`);
+      }
+      return data;
     }
 
     function setSavedWifi(ssid) {
@@ -1053,6 +1227,10 @@
     }
 
     async function updateWifiStatus() {
+      if (firmwareUploadBusy || firmwareReleaseBusy) {
+        renderFirmwareState(lastStatusSnapshot);
+        return lastStatusSnapshot;
+      }
       try {
         const data = await fetchStatusSnapshot();
         lastStatusSnapshot = data;
@@ -1062,6 +1240,9 @@
         renderFirmwareState(data);
         return data;
       } catch (err) {
+        if (firmwareUploadBusy || firmwareReleaseBusy) {
+          return lastStatusSnapshot;
+        }
         lastStatusSnapshot = null;
         lastWifiState = { kind: "error" };
         renderWifiState();
@@ -1308,8 +1489,8 @@
       if (!Number.isInteger(minutesOfDay) || minutesOfDay < 0 || minutesOfDay >= 1440) {
         return null;
       }
-      if (minutesOfDay >= 1320) return minutesOfDay - 1320;
-      if (minutesOfDay <= 360) return minutesOfDay + 120;
+      if (minutesOfDay >= 1080) return minutesOfDay - 1080;
+      if (minutesOfDay <= 540) return minutesOfDay + 360;
       return null;
     }
 
@@ -1343,7 +1524,7 @@
         const error = t(
             "power.nightWindowError",
             {},
-            "Start/end must be inside the night window 22:00-06:00.");
+            "Start/end must be inside the night window 18:00-09:00.");
         if (showError) powerValidationEl.textContent = error;
         return { ok: false, error };
       }
@@ -1352,7 +1533,7 @@
         const error = t(
             "power.invalidRangeError",
             {},
-            "Invalid range: examples are 22:00-06:00 or 23:30-05:00.");
+            "Invalid range: examples are 18:00-09:00 or 23:30-05:00.");
         if (showError) powerValidationEl.textContent = error;
         return { ok: false, error };
       }
@@ -1383,9 +1564,9 @@
       const updateIntervalSec = clampInterval(cfg.updateIntervalSec || 40);
       const manualRefreshCount = clampManualRefreshCount(cfg.manualRefreshCount || 20);
       const nightSleepStart =
-          typeof cfg.nightSleepStart === "string" ? cfg.nightSleepStart : "22:00";
+          typeof cfg.nightSleepStart === "string" ? cfg.nightSleepStart : "18:00";
       const nightSleepEnd =
-          typeof cfg.nightSleepEnd === "string" ? cfg.nightSleepEnd : "06:00";
+          typeof cfg.nightSleepEnd === "string" ? cfg.nightSleepEnd : "09:00";
       powerModeSelect.value = String(powerMode);
       updateIntervalInput.value = String(updateIntervalSec);
       manualRefreshCountInput.value = String(manualRefreshCount);
@@ -1530,7 +1711,7 @@
       renderFirmwareState(lastStatusSnapshot);
     });
     firmwareUploadBtn.addEventListener("click", async () => {
-      if (firmwareUploadBusy || firmwareRebootPending) {
+      if (firmwareUploadBusy || firmwareReleaseBusy || firmwareRebootPending) {
         return;
       }
 
@@ -1564,7 +1745,7 @@
             t(
                 "settings.firmwareReloadScheduled",
                 {},
-                "Firmware uploaded. The page will reload automatically after the reboot."));
+                "Firmware update finished. The page will reload automatically after the reboot."));
         renderFirmwareState(lastStatusSnapshot);
         scheduleFirmwarePageReload();
       } catch (error) {
@@ -1575,6 +1756,104 @@
                 "settings.firmwareUploadFailed",
                 { error: error && error.message ? error.message : t("common.unknownError", {}, "unknown error") },
                 "Firmware upload failed"),
+            false);
+        renderFirmwareState(lastStatusSnapshot);
+      }
+    });
+    firmwareReleaseCheckBtn.addEventListener("click", async () => {
+      if (firmwareUploadBusy || firmwareReleaseBusy || firmwareRebootPending) {
+        return;
+      }
+
+      firmwareReleaseBusy = true;
+      setSettingsStatus(
+          t("settings.firmwareCheckingStatus", {}, "Checking the latest release..."));
+      renderFirmwareState(lastStatusSnapshot);
+
+      try {
+        lastReleaseSnapshot = await fetchFirmwareReleaseInfo();
+        setSettingsStatus(t("settings.firmwareCheckComplete", {}, "Release check complete."));
+      } catch (error) {
+        lastReleaseSnapshot = {
+          ok: false,
+          error: error && error.message
+              ? error.message
+              : t("common.unknownError", {}, "unknown error"),
+        };
+        setSettingsStatus(
+            t(
+                "settings.firmwareReleaseCheckFailed",
+                {
+                  error: lastReleaseSnapshot.error,
+                },
+                `Release check failed: ${lastReleaseSnapshot.error}`),
+            false);
+      } finally {
+        firmwareReleaseBusy = false;
+        renderFirmwareState(lastStatusSnapshot);
+      }
+    });
+    firmwareReleaseInstallBtn.addEventListener("click", async () => {
+      if (firmwareUploadBusy || firmwareReleaseBusy || firmwareRebootPending) {
+        return;
+      }
+      if (!lastReleaseSnapshot || !lastReleaseSnapshot.ok || !lastReleaseSnapshot.installReady) {
+        setSettingsStatus(
+            t(
+                "settings.firmwareReleaseUnknown",
+                {},
+                "Latest release not checked yet."),
+            false);
+        renderFirmwareState(lastStatusSnapshot);
+        return;
+      }
+
+      firmwareReleaseBusy = true;
+      firmwareReleaseInstallBusy = true;
+      setFirmwareProgressVisible(true);
+      setFirmwareProgressIndeterminate(
+          t(
+              "settings.firmwareInstallingProgress",
+              {},
+              "Download and install in progress..."));
+      setSettingsStatus(
+          t(
+              "settings.firmwareInstallingStatus",
+              {},
+              "Downloading and installing the latest release..."));
+      renderFirmwareState(lastStatusSnapshot);
+
+      try {
+        await installLatestFirmwareRelease();
+        firmwareReleaseBusy = false;
+        firmwareReleaseInstallBusy = false;
+        firmwareRebootPending = true;
+        if (lastStatusSnapshot) {
+          lastStatusSnapshot = { ...lastStatusSnapshot, rebootPending: true };
+        }
+        setFirmwareProgress(
+            100,
+            t("settings.firmwareInstallComplete", {}, "Firmware install complete. Device is rebooting..."));
+        setSettingsStatus(
+            t(
+                "settings.firmwareReloadScheduled",
+                {},
+                "Firmware update finished. The page will reload automatically after the reboot."));
+        renderFirmwareState(lastStatusSnapshot);
+        scheduleFirmwarePageReload();
+      } catch (error) {
+        firmwareReleaseBusy = false;
+        firmwareReleaseInstallBusy = false;
+        setFirmwareProgressVisible(false);
+        setSettingsStatus(
+            t(
+                "settings.firmwareInstallFailed",
+                {
+                  error: error && error.message
+                      ? error.message
+                      : t("common.unknownError", {}, "unknown error"),
+                },
+                `Automatic firmware install failed: ${error && error.message ? error.message : "unknown error"}`),
             false);
         renderFirmwareState(lastStatusSnapshot);
       }

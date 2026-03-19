@@ -16,6 +16,7 @@
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <driver/rtc_io.h>
+#include <mbedtls/sha256.h>
 #include <qrcode.h>
 #include "favicon_ico.h"
 #include "generated_web_assets.h"
@@ -70,6 +71,8 @@ constexpr uint8_t kSetupQrQuietZone = 4;
 constexpr char kVrsLegacyPrefix[] = "https://www.vrs.de/am/s/";
 constexpr char kVrsRequestPrefix[] =
     "https://www.vrs.de/index.php?eID=tx_vrsinfo_departuremonitor&i=";
+constexpr char kGithubLatestReleaseUrl[] =
+    "https://api.github.com/repos/mytzn/esp32-mini-departure-monitor/releases/latest";
 constexpr size_t kVrsHashLength = 32;
 constexpr size_t kMaxDepartures = 3;
 constexpr size_t kDepartureLineLen = 64;
@@ -84,10 +87,10 @@ constexpr uint8_t kManualRefreshCountStep = 5;
 constexpr uint8_t kDefaultManualRefreshCount = 20;
 constexpr uint8_t kActiveIntervalBurstCount = 20;
 constexpr uint32_t kManualLongSleepSec = 24UL * 60UL * 60UL;
-constexpr char kDefaultNightSleepStart[] = "22:00";
-constexpr char kDefaultNightSleepEnd[] = "06:00";
-constexpr int kNightWindowStartMinutes = 22 * 60;
-constexpr int kNightWindowEndMinutes = 6 * 60;
+constexpr char kDefaultNightSleepStart[] = "18:00";
+constexpr char kDefaultNightSleepEnd[] = "09:00";
+constexpr int kNightWindowStartMinutes = 18 * 60;
+constexpr int kNightWindowEndMinutes = 9 * 60;
 bool wifi_fast_connect_enabled = true;
 bool power_down_peripherals_before_sleep = true;
 bool battery_monitor_enabled = true;
@@ -104,6 +107,8 @@ constexpr uint32_t kNtpSyncTimeoutMs = 12000;
 constexpr uint32_t kWifiConnectTimeoutMs = 10000;
 constexpr uint32_t kWifiFastConnectTimeoutMs = 3000;
 constexpr uint32_t kWifiConnectPollMs = 200;
+constexpr uint32_t kGithubRequestTimeoutMs = 12000;
+constexpr uint32_t kFirmwareDownloadIdleTimeoutMs = 15000;
 constexpr time_t kMinValidEpoch = 1700000000;
 constexpr int kPastDepartureGraceMinutes = 2;
 constexpr size_t kWifiBssidLength = 6;
@@ -113,6 +118,8 @@ constexpr size_t kJsonDocCapStationsSave = 4 * 1024;
 constexpr size_t kJsonDocCapConfigResponse = 4 * 1024;
 constexpr size_t kJsonDocCapPostConfig = 6 * 1024;
 constexpr size_t kJsonDocCapPostStations = 4 * 1024;
+constexpr size_t kJsonDocCapReleaseInfo = 12 * 1024;
+constexpr size_t kFirmwareDownloadBufferSize = 2048;
 constexpr uint32_t kFirmwareUpdateRebootDelayMs = 750;
 
 #define LOG_DEBUG(...)                                  \
@@ -317,6 +324,21 @@ struct AppConfig {
   String night_sleep_end = kDefaultNightSleepEnd;
 };
 
+struct FirmwareReleaseInfo {
+  String current_version;
+  String latest_tag;
+  String release_url;
+  String asset_name;
+  String asset_url;
+  String checksum_sha256;
+  String message;
+  String error;
+  size_t asset_size = 0;
+  bool update_available = false;
+  bool current_is_newer = false;
+  bool install_ready = false;
+};
+
 struct DebouncedInputState {
   bool initialized = false;
   bool last_raw = true;
@@ -366,10 +388,23 @@ const EmbeddedWebAsset *findEmbeddedWebAsset(const char *path);
 void sendEmbeddedWebAsset(const EmbeddedWebAsset &asset);
 bool sendEmbeddedWebAssetByPath(const char *path);
 bool isFirmwareUploadAvailable();
+bool isFirmwareUpdateBusy();
 size_t firmwareUploadMaxSize();
 void handleFirmwareUploadPost();
 void handleFirmwareUploadChunk();
+void handleFirmwareReleaseGet();
+void handleFirmwareReleaseInstallPost();
 void scheduleDeviceRestart(uint32_t delay_ms);
+bool parseVersionComponents(const String &value, uint32_t *parts,
+                            size_t &count);
+int compareVersionStrings(const String &left, const String &right);
+String normalizeSha256Digest(const String &value);
+String bytesToLowerHex(const uint8_t *data, size_t len);
+bool fetchLatestFirmwareReleaseInfo(FirmwareReleaseInfo &info);
+void fillFirmwareReleaseInfoJson(JsonDocument &doc,
+                                 const FirmwareReleaseInfo &info);
+bool performFirmwareReleaseInstall(const FirmwareReleaseInfo &info,
+                                   size_t &bytes_written, String &error);
 bool isCaptivePortalTestEnabled();
 bool shouldRunCaptivePortal();
 void syncCaptivePortalDns(bool ap_ready);
@@ -480,6 +515,9 @@ uint32_t firmware_update_restart_at_ms = 0;
 size_t firmware_upload_bytes_written = 0;
 size_t firmware_upload_total_size = 0;
 String firmware_upload_error;
+bool firmware_release_install_in_progress = false;
+size_t firmware_release_install_bytes_written = 0;
+String firmware_release_install_error;
 DebouncedInputState key_station_state;
 DebouncedInputState key_setup_state;
 DebouncedInputState key_sleep_state;
@@ -3244,6 +3282,9 @@ void registerServerRoutesIfNeeded() {
   server.on("/api/config", HTTP_POST, handlePostConfig);
   server.on("/api/firmware", HTTP_POST, handleFirmwareUploadPost,
             handleFirmwareUploadChunk);
+  server.on("/api/firmware/release", HTTP_GET, handleFirmwareReleaseGet);
+  server.on("/api/firmware/release/install", HTTP_POST,
+            handleFirmwareReleaseInstallPost);
   server.on("/api/stations", HTTP_POST, handlePostStations);
   server.on("/api/reboot", HTTP_POST, []() {
     LOG_DEBUG("POST /api/reboot");
@@ -3309,6 +3350,7 @@ void registerServerRoutesIfNeeded() {
     doc["max_boot_failures"] = kMaxBootFailures;
     doc["firmwareUploadEnabled"] = isFirmwareUploadAvailable();
     doc["firmwareUploadInProgress"] = firmware_upload_in_progress;
+    doc["firmwareReleaseInstallInProgress"] = firmware_release_install_in_progress;
     doc["firmwareMaxSize"] = firmware_max_size;
     doc["rebootPending"] = firmware_update_restart_pending;
     if (doc.overflowed()) {
@@ -3435,6 +3477,262 @@ void sendConfigPage() {
   sendEmbeddedWebAsset(*page);
 }
 
+bool parseVersionComponents(const String &value, uint32_t *parts,
+                            size_t &count) {
+  count = 0;
+  bool started = false;
+  bool in_number = false;
+  uint32_t current = 0;
+
+  for (size_t index = 0; index < value.length(); ++index) {
+    const char ch = value.charAt(index);
+    if (ch >= '0' && ch <= '9') {
+      started = true;
+      in_number = true;
+      current = current * 10U + static_cast<uint32_t>(ch - '0');
+      continue;
+    }
+
+    if (!started) {
+      continue;
+    }
+
+    if (ch == '.') {
+      if (!in_number) {
+        return false;
+      }
+      if (count < 4) {
+        parts[count++] = current;
+      }
+      current = 0;
+      in_number = false;
+      continue;
+    }
+
+    if (in_number && count < 4) {
+      parts[count++] = current;
+    }
+    return count > 0;
+  }
+
+  if (in_number && count < 4) {
+    parts[count++] = current;
+  }
+  return count > 0;
+}
+
+int compareVersionStrings(const String &left, const String &right) {
+  uint32_t left_parts[4] = {};
+  uint32_t right_parts[4] = {};
+  size_t left_count = 0;
+  size_t right_count = 0;
+  const bool left_ok = parseVersionComponents(left, left_parts, left_count);
+  const bool right_ok = parseVersionComponents(right, right_parts, right_count);
+
+  if (!left_ok || !right_ok) {
+    return left.equalsIgnoreCase(right) ? 0 : 0;
+  }
+
+  const size_t max_count = left_count > right_count ? left_count : right_count;
+  for (size_t index = 0; index < max_count; ++index) {
+    const uint32_t left_value = index < left_count ? left_parts[index] : 0;
+    const uint32_t right_value = index < right_count ? right_parts[index] : 0;
+    if (left_value < right_value) {
+      return -1;
+    }
+    if (left_value > right_value) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+String normalizeSha256Digest(const String &value) {
+  String normalized = value;
+  normalized.trim();
+  normalized.toLowerCase();
+  if (normalized.startsWith("sha256:")) {
+    normalized.remove(0, 7);
+  }
+  if (normalized.length() != 64) {
+    return "";
+  }
+  for (size_t index = 0; index < normalized.length(); ++index) {
+    const char ch = normalized.charAt(index);
+    const bool is_hex =
+        (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+    if (!is_hex) {
+      return "";
+    }
+  }
+  return normalized;
+}
+
+String bytesToLowerHex(const uint8_t *data, size_t len) {
+  static const char kHex[] = "0123456789abcdef";
+  String out;
+  if (!out.reserve(len * 2)) {
+    return "";
+  }
+  for (size_t index = 0; index < len; ++index) {
+    out += kHex[(data[index] >> 4) & 0x0F];
+    out += kHex[data[index] & 0x0F];
+  }
+  return out;
+}
+
+void fillFirmwareReleaseInfoJson(JsonDocument &doc,
+                                 const FirmwareReleaseInfo &info) {
+  doc["currentVersion"] = info.current_version;
+  doc["updateAvailable"] = info.update_available;
+  doc["currentIsNewer"] = info.current_is_newer;
+  doc["installReady"] = info.install_ready;
+  if (info.latest_tag.length() > 0) {
+    doc["latestVersion"] = info.latest_tag;
+  }
+  if (info.release_url.length() > 0) {
+    doc["releaseUrl"] = info.release_url;
+  }
+  if (info.asset_name.length() > 0) {
+    doc["assetName"] = info.asset_name;
+  }
+  if (info.asset_size > 0) {
+    doc["assetSize"] = info.asset_size;
+  }
+  if (info.message.length() > 0) {
+    doc["message"] = info.message;
+  }
+  if (info.error.length() > 0) {
+    doc["error"] = info.error;
+  }
+}
+
+bool fetchLatestFirmwareReleaseInfo(FirmwareReleaseInfo &info) {
+  info = FirmwareReleaseInfo{};
+  info.current_version = kAppVersion;
+
+  if (!isFirmwareUploadAvailable()) {
+    info.error = "firmware update only available in setup mode";
+    return false;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    info.error = "device is not connected to WiFi";
+    return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(kGithubRequestTimeoutMs);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setUserAgent(String("mini-departure-monitor/") + kAppVersion);
+  if (!http.begin(client, kGithubLatestReleaseUrl)) {
+    info.error = "release check HTTP begin failed";
+    return false;
+  }
+
+  http.addHeader("Accept", "application/vnd.github+json");
+  http.addHeader("X-GitHub-Api-Version", "2022-11-28");
+  http.addHeader("Accept-Encoding", "identity");
+
+  const int http_code = http.GET();
+  if (http_code != HTTP_CODE_OK) {
+    info.error = String("release check failed: HTTP ") + http_code;
+    http.end();
+    return false;
+  }
+
+  const String payload = http.getString();
+  http.end();
+
+  CappedJsonAllocator json_alloc(kJsonDocCapReleaseInfo);
+  JsonDocument doc(&json_alloc);
+  const DeserializationError parse_err = deserializeJson(doc, payload);
+  if (parse_err != DeserializationError::Ok) {
+    info.error = String("release metadata parse failed: ") + parse_err.c_str();
+    return false;
+  }
+
+  info.latest_tag = doc["tag_name"] | "";
+  info.release_url = doc["html_url"] | "";
+
+  JsonObjectConst selected_asset;
+  if (doc["assets"].is<JsonArrayConst>()) {
+    for (JsonObjectConst asset : doc["assets"].as<JsonArrayConst>()) {
+      String name = asset["name"] | "";
+      name.toLowerCase();
+      if (!name.endsWith(".bin")) {
+        continue;
+      }
+      const String download_url = asset["browser_download_url"] | "";
+      const size_t size =
+          static_cast<size_t>(asset["size"].is<uint32_t>()
+                                  ? asset["size"].as<uint32_t>()
+                                  : asset["size"].as<unsigned long>());
+      if (download_url.isEmpty() || size == 0) {
+        continue;
+      }
+      selected_asset = asset;
+      break;
+    }
+  }
+
+  const int version_cmp = compareVersionStrings(info.latest_tag, info.current_version);
+  info.update_available = version_cmp > 0;
+  info.current_is_newer = version_cmp < 0;
+
+  if (!selected_asset.isNull()) {
+    info.asset_name = selected_asset["name"] | "";
+    info.asset_url = selected_asset["browser_download_url"] | "";
+    info.asset_size =
+        static_cast<size_t>(selected_asset["size"].is<uint32_t>()
+                                ? selected_asset["size"].as<uint32_t>()
+                                : selected_asset["size"].as<unsigned long>());
+    info.checksum_sha256 =
+        normalizeSha256Digest(selected_asset["digest"] | "");
+  }
+
+  if (info.latest_tag.isEmpty()) {
+    info.message = "latest release metadata did not include a version tag";
+    return true;
+  }
+  if (info.asset_name.isEmpty() || info.asset_url.isEmpty() || info.asset_size == 0) {
+    info.message = "latest release has no installable .bin asset";
+    return true;
+  }
+  if (info.checksum_sha256.isEmpty()) {
+    info.message = "latest release asset is missing a sha256 digest";
+    return true;
+  }
+
+  const size_t max_size = firmwareUploadMaxSize();
+  if (max_size == 0) {
+    info.message = "no OTA partition available";
+    return true;
+  }
+  if (info.asset_size > max_size) {
+    info.message = "latest release exceeds the OTA slot size";
+    return true;
+  }
+  if (info.current_is_newer) {
+    info.message = "installed firmware is newer than the latest published release";
+    return true;
+  }
+  if (!info.update_available) {
+    info.message = "device already runs the latest published release";
+    return true;
+  }
+
+  info.install_ready = true;
+  info.message = "update available";
+  return true;
+}
+
+bool isFirmwareUpdateBusy() {
+  return firmware_upload_in_progress || firmware_release_install_in_progress;
+}
+
 bool isFirmwareUploadAvailable() {
   return current_mode == DeviceMode::Setup && firmwareUploadMaxSize() > 0;
 }
@@ -3460,6 +3758,14 @@ void handleFirmwareUploadPost() {
     String out;
     serializeJson(doc, out);
     server.send(403, "application/json", out);
+    return;
+  }
+  if (firmware_release_install_in_progress) {
+    doc["ok"] = false;
+    doc["error"] = "automatic firmware install already in progress";
+    String out;
+    serializeJson(doc, out);
+    server.send(409, "application/json", out);
     return;
   }
 
@@ -3505,6 +3811,10 @@ void handleFirmwareUploadChunk() {
 
       if (!isFirmwareUploadAvailable()) {
         firmware_upload_error = "firmware upload only available in setup mode";
+        return;
+      }
+      if (firmware_release_install_in_progress) {
+        firmware_upload_error = "automatic firmware install already in progress";
         return;
       }
       if (firmware_update_restart_pending) {
@@ -3610,6 +3920,257 @@ void handleFirmwareUploadChunk() {
     default:
       break;
   }
+}
+
+bool performFirmwareReleaseInstall(const FirmwareReleaseInfo &info,
+                                   size_t &bytes_written, String &error) {
+  bytes_written = 0;
+  error = "";
+
+  if (!info.install_ready) {
+    error = info.message.length() > 0 ? info.message : "release is not installable";
+    return false;
+  }
+  if (firmwareUploadMaxSize() == 0) {
+    error = "no OTA partition available";
+    return false;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setTimeout(kGithubRequestTimeoutMs);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setUserAgent(String("mini-departure-monitor/") + kAppVersion);
+  if (!http.begin(client, info.asset_url)) {
+    error = "firmware download HTTP begin failed";
+    return false;
+  }
+
+  http.addHeader("Accept", "application/octet-stream");
+  http.addHeader("Accept-Encoding", "identity");
+
+  const int http_code = http.GET();
+  if (http_code != HTTP_CODE_OK) {
+    error = String("firmware download failed: HTTP ") + http_code;
+    http.end();
+    return false;
+  }
+
+  const int content_length = http.getSize();
+  if (content_length > 0 &&
+      static_cast<size_t>(content_length) != info.asset_size) {
+    error = "download size does not match release metadata";
+    http.end();
+    return false;
+  }
+
+  const bool begin_ok =
+      info.asset_size > 0 ? Update.begin(info.asset_size, U_FLASH)
+                          : Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH);
+  if (!begin_ok) {
+    error = String("update begin failed: ") + Update.errorString();
+    http.end();
+    return false;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+  if (stream == nullptr) {
+    error = "firmware download stream unavailable";
+    http.end();
+    Update.abort();
+    return false;
+  }
+
+  mbedtls_sha256_context sha_ctx;
+  mbedtls_sha256_init(&sha_ctx);
+  mbedtls_sha256_starts(&sha_ctx, 0);
+
+  int remaining = content_length;
+  uint8_t buffer[kFirmwareDownloadBufferSize];
+  uint32_t last_data_ms = millis();
+  bool download_ok = true;
+
+  while (http.connected() && (remaining > 0 || remaining == -1)) {
+    const size_t available_bytes = stream->available();
+    if (available_bytes == 0) {
+      if (static_cast<uint32_t>(millis() - last_data_ms) >=
+          kFirmwareDownloadIdleTimeoutMs) {
+        error = "firmware download timed out";
+        download_ok = false;
+        break;
+      }
+      delay(1);
+      continue;
+    }
+
+    size_t chunk_size = available_bytes;
+    if (chunk_size > sizeof(buffer)) {
+      chunk_size = sizeof(buffer);
+    }
+    const int read_count = stream->readBytes(reinterpret_cast<char *>(buffer),
+                                             chunk_size);
+    if (read_count <= 0) {
+      if (static_cast<uint32_t>(millis() - last_data_ms) >=
+          kFirmwareDownloadIdleTimeoutMs) {
+        error = "firmware download timed out";
+        download_ok = false;
+        break;
+      }
+      delay(1);
+      continue;
+    }
+
+    last_data_ms = millis();
+    mbedtls_sha256_update(&sha_ctx, buffer, static_cast<size_t>(read_count));
+
+    const size_t written = Update.write(buffer, static_cast<size_t>(read_count));
+    if (written != static_cast<size_t>(read_count)) {
+      error = String("update write failed: ") + Update.errorString();
+      download_ok = false;
+      break;
+    }
+
+    bytes_written += written;
+    if (remaining > 0) {
+      remaining -= read_count;
+    }
+    delay(1);
+  }
+
+  http.end();
+
+  uint8_t sha_bytes[32] = {};
+  mbedtls_sha256_finish(&sha_ctx, sha_bytes);
+  mbedtls_sha256_free(&sha_ctx);
+
+  if (!download_ok) {
+    Update.abort();
+    return false;
+  }
+  if (remaining > 0) {
+    error = "firmware download ended before all bytes were received";
+    Update.abort();
+    return false;
+  }
+  if (bytes_written != info.asset_size) {
+    error = "downloaded firmware size does not match release metadata";
+    Update.abort();
+    return false;
+  }
+
+  const String calculated_sha256 = bytesToLowerHex(sha_bytes, sizeof(sha_bytes));
+  if (calculated_sha256.length() == 0) {
+    error = "sha256 conversion failed";
+    Update.abort();
+    return false;
+  }
+  if (!calculated_sha256.equalsIgnoreCase(info.checksum_sha256)) {
+    error = "firmware checksum mismatch";
+    Update.abort();
+    return false;
+  }
+
+  if (!Update.end(true)) {
+    error = String("update finalize failed: ") + Update.errorString();
+    Update.abort();
+    return false;
+  }
+
+  return true;
+}
+
+void handleFirmwareReleaseGet() {
+  LOG_DEBUG("GET /api/firmware/release");
+
+  FirmwareReleaseInfo info;
+  JsonDocument doc;
+  const bool ok = fetchLatestFirmwareReleaseInfo(info);
+  doc["ok"] = ok;
+  fillFirmwareReleaseInfoJson(doc, info);
+  String out;
+  serializeJson(doc, out);
+  server.send(ok ? 200 : 400, "application/json", out);
+}
+
+void handleFirmwareReleaseInstallPost() {
+  LOG_DEBUG("POST /api/firmware/release/install");
+
+  JsonDocument doc;
+  if (!isFirmwareUploadAvailable()) {
+    doc["ok"] = false;
+    doc["error"] = "firmware update only available in setup mode";
+    String out;
+    serializeJson(doc, out);
+    server.send(403, "application/json", out);
+    return;
+  }
+  if (isFirmwareUpdateBusy()) {
+    doc["ok"] = false;
+    doc["error"] = "another firmware update is already in progress";
+    String out;
+    serializeJson(doc, out);
+    server.send(409, "application/json", out);
+    return;
+  }
+  if (firmware_update_restart_pending) {
+    doc["ok"] = false;
+    doc["error"] = "device reboot already scheduled";
+    String out;
+    serializeJson(doc, out);
+    server.send(409, "application/json", out);
+    return;
+  }
+
+  FirmwareReleaseInfo info;
+  if (!fetchLatestFirmwareReleaseInfo(info)) {
+    doc["ok"] = false;
+    fillFirmwareReleaseInfoJson(doc, info);
+    String out;
+    serializeJson(doc, out);
+    server.send(400, "application/json", out);
+    return;
+  }
+  if (!info.install_ready) {
+    doc["ok"] = false;
+    fillFirmwareReleaseInfoJson(doc, info);
+    if (info.message.length() > 0) {
+      doc["error"] = info.message;
+    }
+    String out;
+    serializeJson(doc, out);
+    server.send(400, "application/json", out);
+    return;
+  }
+
+  firmware_release_install_in_progress = true;
+  firmware_release_install_bytes_written = 0;
+  firmware_release_install_error = "";
+
+  String install_error;
+  const bool installed =
+      performFirmwareReleaseInstall(info, firmware_release_install_bytes_written,
+                                    install_error);
+  firmware_release_install_in_progress = false;
+  firmware_release_install_error = install_error;
+
+  doc["ok"] = installed;
+  fillFirmwareReleaseInfoJson(doc, info);
+  doc["bytesWritten"] = firmware_release_install_bytes_written;
+  if (!installed) {
+    doc["error"] = install_error;
+    String out;
+    serializeJson(doc, out);
+    server.send(400, "application/json", out);
+    return;
+  }
+
+  doc["version"] = kAppVersion;
+  doc["rebooting"] = true;
+  String out;
+  serializeJson(doc, out);
+  server.send(200, "application/json", out);
+  scheduleDeviceRestart(kFirmwareUpdateRebootDelayMs);
 }
 
 void ensureSetupServicesRunning() {

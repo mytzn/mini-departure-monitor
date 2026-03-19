@@ -4,7 +4,9 @@ This project turns a small ESP32-based ePaper device into a dedicated public tra
 
 ![image info](./images/mini-departure-monitor.png)
 
-The firmware runs on an ESP32S3 with the Seeed XIAO ePaper Display EE04 Board and fetches live departure information for up to four configured stops. Setup is done locally in the browser through a temporary Wi-Fi access point hosted by the device itself.
+The firmware runs on an ESP32S3 embedded on the Seeed XIAO ePaper Display EE04 Board and fetches live departure information for up to four configured stops in the service area of the **VRS (Verkehrsverbund Rhein-Sieg)**.
+
+![image info](./images/VRS-area.png)
 
 ## Disclaimer
 
@@ -131,8 +133,8 @@ Current refresh interval range:
 
 Default night window:
 
-- Start: `22:00`
-- End: `06:00`
+- Start: `18:00`
+- End: `09:00`
 
 ## Software Stack
 
@@ -158,12 +160,6 @@ From the project root:
 pio run
 pio run -t upload
 pio device monitor -b 115200
-```
-
-If you prefer the explicit PlatformIO path used on this machine:
-
-```bash
-~/.platformio/penv/bin/platformio run
 ```
 
 `platformio.ini` is currently configured for:
@@ -215,6 +211,8 @@ The setup UI talks to a small local HTTP API on the device:
 - `GET /api/config` read current configuration
 - `POST /api/config` save Wi-Fi, stations, and power settings
 - `POST /api/firmware` upload a new `firmware.bin` and reboot
+- `GET /api/firmware/release` check the latest GitHub release and OTA eligibility
+- `POST /api/firmware/release/install` download, verify, and install the latest GitHub release
 - `POST /api/stations` save station list only
 - `GET /api/scan` run or read Wi-Fi scan results
 - `GET /api/status` read connection and signal state
@@ -223,9 +221,12 @@ The setup UI talks to a small local HTTP API on the device:
 
 ## Web Firmware Update
 
-Once a device is running this OTA-capable partition layout, the setup UI can install new firmware images directly from the browser.
+Once a device is running this OTA-capable partition layout, the setup UI can update firmware in two ways:
 
-Release workflow:
+- Upload a local `firmware.bin`
+- Let the device install the latest published GitHub release
+
+Manual upload workflow:
 
 1. Update `VERSION` if needed.
 2. Build the project with `pio run`.
@@ -234,10 +235,22 @@ Release workflow:
 5. Open the Settings card and upload that `firmware.bin`.
 6. Wait for the automatic reboot and page reload.
 
+Automatic GitHub release workflow:
+
+1. Publish a GitHub release that contains a `.bin` firmware asset.
+2. Put the device into setup mode and open the setup UI.
+3. Make sure the device is connected to a Wi-Fi network with internet access.
+4. Open the Settings card and click `Check for Update`.
+5. If a newer release is available, click `Install Latest Release`.
+6. The device downloads the asset from GitHub, verifies the SHA-256 digest from the release metadata, installs the update, and reboots.
+
 Current limitations:
 
 - Only the application image is updated. Upload `firmware.bin`, not `bootloader.bin` or `partitions.bin`.
-- Firmware upload is only available while the device is in setup mode.
+- Firmware updates are only available while the device is in setup mode.
+- Automatic installation only checks the latest published GitHub release.
+- Automatic installation requires a `.bin` release asset with GitHub-provided `digest` metadata.
+- Automatic installation is blocked when the installed firmware is already current or newer than the latest published release.
 - The OTA slot size is currently `0x300000` bytes (3.0 MB). Larger images are rejected by the device.
 
 ## Stored Configuration
@@ -257,12 +270,10 @@ The firmware persists the following values in NVS:
 ## Notes
 
 - Captive portal DNS support exists in the firmware but is currently disabled by default.
-- Battery monitoring is enabled in the firmware.
-- Charging detection hooks exist but are disabled by default until matching hardware wiring is available.
 - `web/` is the source tree for the setup UI.
 - `tools/build_web_assets.py` generates `include/generated_web_assets.h` before each build.
 - `pio run` and `pio run -t upload` rebuild the embedded web assets automatically.
-- The setup UI now exposes browser-based OTA uploads for `firmware.bin`.
+- The setup UI now supports both local OTA uploads and automatic installation of the latest GitHub release.
 
 ## License And Trademarks
 
