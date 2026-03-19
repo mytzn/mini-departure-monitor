@@ -72,7 +72,7 @@ constexpr char kVrsLegacyPrefix[] = "https://www.vrs.de/am/s/";
 constexpr char kVrsRequestPrefix[] =
     "https://www.vrs.de/index.php?eID=tx_vrsinfo_departuremonitor&i=";
 constexpr char kGithubLatestReleaseUrl[] =
-    "https://api.github.com/repos/mytzn/esp32-mini-departure-monitor/releases/latest";
+    "https://api.github.com/repos/mytzn/mini-departure-monitor/releases/latest";
 constexpr size_t kVrsHashLength = 32;
 constexpr size_t kMaxDepartures = 3;
 constexpr size_t kDepartureLineLen = 64;
