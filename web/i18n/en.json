@@ -165,7 +165,7 @@
     "close": "Close"
   },
   "footer": {
-    "note": "Mini Departures · v__APP_VERSION__ · Made by <a href=\"https://github.com/mytzn/\" target=\"_blank\" rel=\"noreferrer\">@mytzn</a>"
+    "note": "Mini Departures · v__APP_VERSION__ · Made by <a href=\"https://github.com/mytzn/mini-departure-monitor\" target=\"_blank\" rel=\"noreferrer\">@mytzn</a>"
   },
   "common": {
     "failedToLoadConfig": "Failed to load configuration.",

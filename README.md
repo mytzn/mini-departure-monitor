@@ -273,7 +273,6 @@ The firmware persists the following values in NVS:
 - `web/` is the source tree for the setup UI.
 - `tools/build_web_assets.py` generates `include/generated_web_assets.h` before each build.
 - `pio run` and `pio run -t upload` rebuild the embedded web assets automatically.
-- The setup UI now supports both local OTA uploads and automatic installation of the latest GitHub release.
 
 ## License And Trademarks
 

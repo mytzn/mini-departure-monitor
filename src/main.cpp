@@ -65,6 +65,7 @@ constexpr char kMdnsName[] = "mini";
 constexpr bool kFlipDisplay180 = true;
 constexpr uint32_t kLoopLogIntervalMs = 2000;
 constexpr uint32_t kButtonDebounceMs = 40;
+constexpr int16_t kDisplayInsetPx = 4;  // Approx. 1 mm on this panel.
 constexpr int16_t kSetupQrSize = 100;
 constexpr uint8_t kSetupQrVersion = 3;
 constexpr uint8_t kSetupQrQuietZone = 4;
@@ -121,6 +122,22 @@ constexpr size_t kJsonDocCapPostStations = 4 * 1024;
 constexpr size_t kJsonDocCapReleaseInfo = 12 * 1024;
 constexpr size_t kFirmwareDownloadBufferSize = 2048;
 constexpr uint32_t kFirmwareUpdateRebootDelayMs = 750;
+
+struct DisplayContentRect {
+  int16_t left;
+  int16_t top;
+  int16_t right;
+  int16_t bottom;
+};
+
+DisplayContentRect makeDisplayContentRect(int16_t screen_w, int16_t screen_h) {
+  const int16_t inset_x =
+      (screen_w > (kDisplayInsetPx * 4)) ? kDisplayInsetPx : (screen_w / 4);
+  const int16_t inset_y =
+      (screen_h > (kDisplayInsetPx * 4)) ? kDisplayInsetPx : (screen_h / 4);
+  return {inset_x, inset_y, static_cast<int16_t>(screen_w - inset_x),
+          static_cast<int16_t>(screen_h - inset_y)};
+}
 
 #define LOG_DEBUG(...)                                  \
   do {                                                  \
@@ -2653,11 +2670,24 @@ uint8_t batteryPercentFromMillivolts(uint32_t millivolts) {
 }
 
 void drawWifiIcon(int16_t x, int16_t y) {
-  // Simple 3-arc WiFi glyph plus dot, top-left anchored.
-  display.fillCircle(x + 2, y + 12, 2, GxEPD_BLACK);
-  display.drawCircle(x + 2, y + 12, 5, GxEPD_BLACK);
-  display.drawCircle(x + 2, y + 12, 8, GxEPD_BLACK);
-  display.drawCircle(x + 2, y + 12, 11, GxEPD_BLACK);
+  // Draw upper arcs directly so the glyph does not depend on screen-edge
+  // clipping when the content area is inset from the panel border.
+  const int16_t center_x = x + 6;
+  const int16_t center_y = y + 12;
+  display.fillCircle(center_x, center_y, 2, GxEPD_BLACK);
+  display.drawCircleHelper(center_x, center_y, 4, 0x3, GxEPD_BLACK);
+  display.drawCircleHelper(center_x, center_y, 7, 0x3, GxEPD_BLACK);
+  display.drawCircleHelper(center_x, center_y, 10, 0x3, GxEPD_BLACK);
+}
+
+void drawBusIcon(int16_t x, int16_t y) {
+  // Compact bus glyph based on the setup artwork, tuned for the footer size.
+  display.fillRoundRect(x + 1, y + 1, 14, 11, 3, GxEPD_BLACK);
+  display.fillRoundRect(x + 4, y + 3, 8, 4, 1, GxEPD_WHITE);
+  display.fillCircle(x + 5, y + 9, 2, GxEPD_WHITE);
+  display.fillCircle(x + 11, y + 9, 2, GxEPD_WHITE);
+  display.fillRoundRect(x + 3, y + 11, 3, 2, 1, GxEPD_BLACK);
+  display.fillRoundRect(x + 10, y + 11, 3, 2, 1, GxEPD_BLACK);
 }
 
 void drawBatteryIcon(int16_t x, int16_t y, uint8_t percent) {
@@ -2980,48 +3010,50 @@ void drawSetupScreen(SetupScreenKind kind) {
     u8g2_for_gfx.setBackgroundColor(GxEPD_WHITE);
     const int16_t screen_w = display.width();
     const int16_t screen_h = display.height();
-    int16_t y = 18;
+    const DisplayContentRect content =
+        makeDisplayContentRect(screen_w, screen_h);
+    int16_t y = content.top + 18;
     u8g2_for_gfx.setFont(u8g2_font_helvB12_tf);
     if (kind == SetupScreenKind::Initial) {
-      u8g2_for_gfx.drawUTF8(0, y, strings.setup_no_wifi);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.setup_no_wifi);
     } else {
-      u8g2_for_gfx.drawUTF8(0, y, strings.setup_settings);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.setup_settings);
     }
     y += 20;
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
     if (kind == SetupScreenKind::Initial) {
-      u8g2_for_gfx.drawUTF8(0, y, strings.setup_connect_ap);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.setup_connect_ap);
       y += 16;
       char ssid_line[64];
       snprintf(ssid_line, sizeof(ssid_line), strings.setup_wifi_format, kApSsid);
-      u8g2_for_gfx.drawUTF8(0, y, ssid_line);
+      u8g2_for_gfx.drawUTF8(content.left, y, ssid_line);
       y += 16;
       char pass_line[64];
       snprintf(pass_line, sizeof(pass_line), strings.setup_password_format, kApPass);
-      u8g2_for_gfx.drawUTF8(0, y, pass_line);
+      u8g2_for_gfx.drawUTF8(content.left, y, pass_line);
       y += 18;
-      u8g2_for_gfx.drawUTF8(0, y, "http://mini.local");
+      u8g2_for_gfx.drawUTF8(content.left, y, "http://mini.local");
       y += 16;
-      u8g2_for_gfx.drawUTF8(0, y, "http://192.168.4.1");
+      u8g2_for_gfx.drawUTF8(content.left, y, "http://192.168.4.1");
 
-      const int16_t qr_x = screen_w - kSetupQrSize;
-      const int16_t qr_y = screen_h - kSetupQrSize;
+      const int16_t qr_x = content.right - kSetupQrSize;
+      const int16_t qr_y = content.bottom - kSetupQrSize;
       drawWifiQrCode(qr_x, qr_y, kSetupQrSize, kApSsid, kApPass);
     } else {
-      u8g2_for_gfx.drawUTF8(0, y, strings.setup_open_browser);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.setup_open_browser);
       y += 16;
       char ssid_line[64];
       const String ssid = WiFi.SSID();
       snprintf(ssid_line, sizeof(ssid_line), strings.setup_wifi_format,
                ssid.isEmpty() ? "-" : ssid.c_str());
-      u8g2_for_gfx.drawUTF8(0, y, ssid_line);
+      u8g2_for_gfx.drawUTF8(content.left, y, ssid_line);
       y += 18;
-      u8g2_for_gfx.drawUTF8(0, y, "http://mini.local");
+      u8g2_for_gfx.drawUTF8(content.left, y, "http://mini.local");
       y += 16;
       char ip_line[64];
       const String ip = WiFi.localIP().toString();
       snprintf(ip_line, sizeof(ip_line), "http://%s", ip.c_str());
-      u8g2_for_gfx.drawUTF8(0, y, ip_line);
+      u8g2_for_gfx.drawUTF8(content.left, y, ip_line);
     }
   } while (display.nextPage());
 }
@@ -3069,60 +3101,56 @@ void drawScreen(const char *date_str, const char *time_str, int32_t rssi_dbm,
 
     const int16_t screen_w = display.width();
     const int16_t screen_h = display.height();
+    const DisplayContentRect content =
+        makeDisplayContentRect(screen_w, screen_h);
+    const int16_t footer_baseline_y = content.bottom - 2;
 
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
     u8g2_for_gfx.setForegroundColor(GxEPD_BLACK);
     u8g2_for_gfx.setBackgroundColor(GxEPD_WHITE);
-    u8g2_for_gfx.drawUTF8(0, 16, date_str);
+    u8g2_for_gfx.drawUTF8(content.left, content.top + 16, date_str);
 
     const int16_t time_w =
         static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(time_str));
-    u8g2_for_gfx.drawUTF8(screen_w - time_w, 16, time_str);
+    u8g2_for_gfx.drawUTF8(content.right - time_w, content.top + 16, time_str);
 
     const int16_t base_line_height = 14;
     const int16_t line_height = (base_line_height * 7) / 5;
-    int16_t y = 22 + line_height;
+    int16_t y = content.top + 22 + line_height;
     u8g2_for_gfx.setFont(u8g2_font_helvB12_tf);
     // Haltestellen title.
     const char *station_name = currentStationName(station_count, station_index);
-    u8g2_for_gfx.drawUTF8(0, y, station_name);
+    u8g2_for_gfx.drawUTF8(content.left, y, station_name);
     y += line_height;
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
     for (size_t i = 0; i < kMaxDepartures; ++i) {
       if (departure_lines[i][0] != '\0') {
-        u8g2_for_gfx.drawUTF8(0, y, departure_lines[i]);
+        u8g2_for_gfx.drawUTF8(content.left, y, departure_lines[i]);
       }
       y += line_height;
     }
 
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
-    drawWifiIcon(0, screen_h - 16);
-    char rssi_buf[64];
+    drawWifiIcon(content.left, content.bottom - 16);
+    char rssi_buf[32];
+    snprintf(rssi_buf, sizeof(rssi_buf), "%ld dBm", rssi_dbm);
+    const int16_t rssi_x = content.left + 18;
+    u8g2_for_gfx.drawUTF8(rssi_x, footer_baseline_y, rssi_buf);
+
+    char station_buf[16];
     const size_t display_index =
         (station_count > 0 && station_index < station_count)
             ? station_index + 1
             : 0;
-    snprintf(rssi_buf, sizeof(rssi_buf), "%ld dBm %u/%u",
-             rssi_dbm,
+    snprintf(station_buf, sizeof(station_buf), "%u/%u",
              static_cast<unsigned>(display_index),
              static_cast<unsigned>(station_count));
-    u8g2_for_gfx.drawUTF8(18, screen_h - 2, rssi_buf);
-    if (shouldShowPowerModeIcon(config.power_mode, runtime_state)) {
-      const int16_t rssi_w = static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(rssi_buf));
-      const int16_t icon_x = 18 + rssi_w + 6;
-      const int16_t icon_y = screen_h - 15;
-      drawPowerModeIcon(icon_x, icon_y, config.power_mode);
-      const bool interval_count_visible =
-          (runtime_state == PowerRuntimeState::ManualInterval ||
-           runtime_state == PowerRuntimeState::AlarmInterval) &&
-          footer_intervals_remaining > 0;
-      if (interval_count_visible) {
-        char remaining_buf[8];
-        snprintf(remaining_buf, sizeof(remaining_buf), "x%u",
-                 static_cast<unsigned>(footer_intervals_remaining));
-        u8g2_for_gfx.drawUTF8(icon_x + 14, screen_h - 2, remaining_buf);
-      }
-    }
+    const int16_t rssi_w =
+        static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(rssi_buf));
+    const int16_t bus_x = rssi_x + rssi_w + 5;
+    drawBusIcon(bus_x, content.bottom - 15);
+    const int16_t station_x = bus_x + 19;
+    u8g2_for_gfx.drawUTF8(station_x, footer_baseline_y, station_buf);
 
     char battery_str[8] = "--%";
     if (battery_valid) {
@@ -3133,10 +3161,45 @@ void drawScreen(const char *date_str, const char *time_str, int32_t rssi_dbm,
         static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(battery_str));
     const int16_t battery_icon_w = 23;
     const int16_t battery_icon_h = 10;
-    const int16_t battery_x = screen_w - battery_icon_w - battery_text_w - 6;
-    const int16_t battery_y = screen_h - battery_icon_h - 4;
+    const int16_t battery_x =
+        content.right - battery_icon_w - battery_text_w - 6;
+    const int16_t battery_y = content.bottom - battery_icon_h - 4;
+
+    if (shouldShowPowerModeIcon(config.power_mode, runtime_state)) {
+      const int16_t station_w =
+          static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(station_buf));
+      const int16_t icon_x = station_x + station_w + 6;
+      const int16_t icon_y = content.bottom - 15;
+      drawPowerModeIcon(icon_x, icon_y, config.power_mode);
+      int16_t status_x = icon_x + 14;
+      const int16_t status_limit_x = battery_x - 4;
+      if (config.power_mode == PowerMode::SleepAlarm &&
+          !config.night_sleep_start.isEmpty()) {
+        const char *night_start = config.night_sleep_start.c_str();
+        const int16_t night_start_w =
+            static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(night_start));
+        if (status_x + night_start_w <= status_limit_x) {
+          u8g2_for_gfx.drawUTF8(status_x, footer_baseline_y, night_start);
+          status_x += night_start_w + 4;
+        }
+      }
+      const bool interval_count_visible =
+          (runtime_state == PowerRuntimeState::ManualInterval ||
+           runtime_state == PowerRuntimeState::AlarmInterval) &&
+          footer_intervals_remaining > 0;
+      if (interval_count_visible) {
+        char remaining_buf[8];
+        snprintf(remaining_buf, sizeof(remaining_buf), "x%u",
+                 static_cast<unsigned>(footer_intervals_remaining));
+        const int16_t remaining_w =
+            static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(remaining_buf));
+        if (status_x + remaining_w <= status_limit_x) {
+          u8g2_for_gfx.drawUTF8(status_x, footer_baseline_y, remaining_buf);
+        }
+      }
+    }
     drawBatteryIcon(battery_x, battery_y, battery_valid ? battery_percent : 0);
-    u8g2_for_gfx.drawUTF8(battery_x + battery_icon_w + 4, screen_h - 2,
+    u8g2_for_gfx.drawUTF8(battery_x + battery_icon_w + 4, footer_baseline_y,
                           battery_str);
 
     (void)screen_w;
@@ -3165,27 +3228,29 @@ void drawDeepSleepScreen(LongSleepScreenKind kind,
     u8g2_for_gfx.setBackgroundColor(GxEPD_WHITE);
     const int16_t screen_w = display.width();
     const int16_t screen_h = display.height();
+    const DisplayContentRect content =
+        makeDisplayContentRect(screen_w, screen_h);
 
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
-    u8g2_for_gfx.drawUTF8(0, 16, date_buf);
+    u8g2_for_gfx.drawUTF8(content.left, content.top + 16, date_buf);
     const int16_t time_w =
         static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(time_buf));
-    u8g2_for_gfx.drawUTF8(screen_w - time_w, 16, time_buf);
+    u8g2_for_gfx.drawUTF8(content.right - time_w, content.top + 16, time_buf);
 
     const int16_t base_line_height = 14;
     const int16_t line_height = (base_line_height * 7) / 5;
-    int16_t y = 22 + line_height;
+    int16_t y = content.top + 22 + line_height;
 
     u8g2_for_gfx.setFont(u8g2_font_helvB12_tf);
-    u8g2_for_gfx.drawUTF8(0, y, strings.sleep_title);
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.sleep_title);
     y += line_height;
     u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
     const char *wake_prefix = strings.sleep_wake_prefix;
     const char *wake_button = strings.sleep_wake_button;
     const int16_t prefix_w =
         static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(wake_prefix));
-    u8g2_for_gfx.drawUTF8(0, y, wake_prefix);
-    const int16_t moon_x = prefix_w + 4;
+    u8g2_for_gfx.drawUTF8(content.left, y, wake_prefix);
+    const int16_t moon_x = content.left + prefix_w + 4;
     drawInlineMoonIcon(moon_x, y - 12);
     u8g2_for_gfx.drawUTF8(moon_x + 20, y, wake_button);
     y += line_height;
@@ -3194,14 +3259,14 @@ void drawDeepSleepScreen(LongSleepScreenKind kind,
       char wake_line[64];
       snprintf(wake_line, sizeof(wake_line), strings.planned_wake_format,
                planned_wake_time != nullptr ? planned_wake_time : "--:--");
-      u8g2_for_gfx.drawUTF8(0, y, wake_line);
+      u8g2_for_gfx.drawUTF8(content.left, y, wake_line);
       y += line_height;
     }
 
     if (kind == LongSleepScreenKind::AlarmNight) {
-      u8g2_for_gfx.drawUTF8(0, y, strings.mode_sleep_alarm);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.mode_sleep_alarm);
     } else if (kind == LongSleepScreenKind::ManualAllDay) {
-      u8g2_for_gfx.drawUTF8(0, y, strings.mode_manual_wake);
+      u8g2_for_gfx.drawUTF8(content.left, y, strings.mode_manual_wake);
     }
   } while (display.nextPage());
 }
