@@ -980,7 +980,7 @@ bool isPowerModeSleepVariant() {
 
 bool shouldShowPowerModeIcon(PowerMode mode, PowerRuntimeState state) {
   if (mode == PowerMode::Continuous) {
-    return true;
+    return false;
   }
   if (mode == PowerMode::SleepAlarm) {
     return true;
@@ -3164,6 +3164,7 @@ void drawScreen(const char *date_str, const char *time_str, int32_t rssi_dbm,
     const int16_t battery_x =
         content.right - battery_icon_w - battery_text_w - 6;
     const int16_t battery_y = content.bottom - battery_icon_h - 4;
+    const bool show_right_plug = config.power_mode == PowerMode::Continuous;
 
     if (shouldShowPowerModeIcon(config.power_mode, runtime_state)) {
       const int16_t station_w =
@@ -3198,9 +3199,15 @@ void drawScreen(const char *date_str, const char *time_str, int32_t rssi_dbm,
         }
       }
     }
-    drawBatteryIcon(battery_x, battery_y, battery_valid ? battery_percent : 0);
-    u8g2_for_gfx.drawUTF8(battery_x + battery_icon_w + 4, footer_baseline_y,
-                          battery_str);
+    if (show_right_plug) {
+      const int16_t plug_x = content.right - 10;
+      const int16_t plug_y = content.bottom - 15;
+      drawPlugIcon(plug_x, plug_y);
+    } else {
+      drawBatteryIcon(battery_x, battery_y, battery_valid ? battery_percent : 0);
+      u8g2_for_gfx.drawUTF8(battery_x + battery_icon_w + 4, footer_baseline_y,
+                            battery_str);
+    }
 
     (void)screen_w;
     (void)screen_h;
