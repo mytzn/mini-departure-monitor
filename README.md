@@ -4,6 +4,8 @@ This project turns a small ESP32-based ePaper device into a dedicated public tra
 
 ![image info](./images/mini-departure-monitor.png)
 
+![image info](./images/mini-departure-monitor-details.png)
+
 The firmware runs on an ESP32S3 embedded on the Seeed XIAO ePaper Display EE04 Board and fetches live departure information for up to four configured stops in the service area of the **VRS (Verkehrsverbund Rhein-Sieg)**.
 
 ![image info](./images/VRS-area.png)
@@ -57,11 +59,36 @@ Typical use cases:
   - `MOSI`: `GPIO9`
 - Keys
   - `KEY1` station button: `GPIO2`
-  - `KEY2` setup key: `GPIO3`
-  - `KEY3` sleep/normal mode key: `GPIO5`
+  - `KEY2` sleep key: `GPIO3`
+  - `KEY3` setup key: `GPIO5`
 - Battery sensing
   - `BAT_ADC`: `GPIO1`
   - `ADC_EN`: `GPIO6`
+
+## Assembly And 3D Printing
+
+The printable enclosure and ready-made print profiles are published on MakerWorld:
+
+- `https://makerworld.com/en/models/2571782-mini-train-bus-departure-monitor`
+
+Print guidance from that page:
+
+- Main enclosure profile: `0.16 mm` layer height, `2` walls, `10%` infill, `3` plates
+- Separate button print profiles are provided for both `0.4 mm` and `0.2 mm` nozzles
+
+Assembly sequence from the MakerWorld model page:
+
+1. Print all parts and connect the Wi-Fi antenna to the EE04 board.
+2. Feed the battery extension cable through the enclosure tube/opening and route it through the battery compartment before continuing.
+3. Insert the 2.9" ePaper panel with its cable extension attached.
+4. Press in the printed display holder so the panel sits flush at the front.
+5. Place the board on the printed backplate and connect the battery extension to the board. Check the battery extension polarity first; the MakerWorld listing notes that you may need to swap it.
+6. Put tape over the button slots and stick the printed buttons to the tape from the inside to hold them in position temporarily.
+7. Carefully slide the backplate and board assembly into the enclosure so the board buttons line up with the printed buttons and remain pressable.
+8. Connect the battery and close the battery lid.
+9. Flash the firmware to the board.
+
+The button-alignment step is the fiddliest part of the assembly.
 
 ## Where The Departure Data Comes From
 
@@ -102,17 +129,26 @@ This project does **not** use an official SDK. It relies on the publicly accessi
 
 ## Device Controls
 
+The firmware uses two top-level device modes:
+
+- `Setup mode`
+  - Shows the configuration/setup screen and serves the local setup UI
+- `Sleep mode`
+  - Runs the normal departure display and applies the selected power mode (`Continuous`, `SleepAlarm`, or `SleepManual`)
+
 The EE04 hardware keys are used like this:
 
-- `KEY1`
-  - Normal mode: cycle through configured stations
-  - Setup mode: leave setup mode and return to normal mode
-- `KEY2`
-  - Normal mode: enter setup mode
-  - Setup mode: leave setup mode and return to normal mode
-- `KEY3`
-  - Normal mode: switch to normal/sleep mode
-  - Setup mode: leave setup mode and return to normal mode
+- `KEY1`: Bus icon 🚍
+  - Sleep mode, while awake: cycle through configured stations
+  - Deep-sleep wake: wake the device; if multiple stations are configured, the wake also advances to the next station
+  - Setup mode, while awake: no dedicated action
+- `KEY2`: Moon icon ☾
+  - Setup mode, while awake: switch to sleep mode
+  - Sleep mode, while awake: enter indefinite deep sleep until a hardware key wakes the device
+  - Deep-sleep wake: wake the device
+- `KEY3`: Settings icon ⚙️
+  - While awake: toggle between setup mode and sleep mode
+  - Deep-sleep wake: wake the device and toggle the mode on resume
 
 ## Power Modes
 
@@ -202,7 +238,7 @@ monitor_port = /dev/cu.usbmodem*
    - choose the refresh interval
    - configure the optional night sleep window
 6. Save the configuration.
-7. Return the device to normal mode.
+7. Return the device to sleep mode for normal operation.
 
 ## Local API
 

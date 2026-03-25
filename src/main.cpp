@@ -3437,7 +3437,6 @@ void registerServerRoutesIfNeeded() {
     server.send(200, "application/json", out);
   });
   server.onNotFound([]() {
-    LOG_DEBUG("Not found: %s", server.uri().c_str());
     if (sendEmbeddedWebAssetByPath(server.uri().c_str())) {
       return;
     }
@@ -3445,6 +3444,7 @@ void registerServerRoutesIfNeeded() {
       sendCaptivePortalRedirect();
       return;
     }
+    LOG_DEBUG("Not found: %s", server.uri().c_str());
     server.send(404, "text/plain", "Not found");
   });
   routes_registered = true;
