@@ -13,6 +13,7 @@
 #include <Update.h>
 #include <esp_system.h>
 #include <esp_sleep.h>
+#include <esp_idf_version.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <driver/rtc_io.h>
@@ -88,6 +89,8 @@ constexpr uint8_t kManualRefreshCountStep = 5;
 constexpr uint8_t kDefaultManualRefreshCount = 20;
 constexpr uint8_t kActiveIntervalBurstCount = 20;
 constexpr uint32_t kManualLongSleepSec = 24UL * 60UL * 60UL;
+constexpr uint8_t kBatteryProtectionThresholdPercent = 20;
+constexpr uint32_t kBatteryProtectionCheckIntervalMs = 60UL * 1000UL;
 constexpr char kDefaultNightSleepStart[] = "18:00";
 constexpr char kDefaultNightSleepEnd[] = "09:00";
 constexpr int kNightWindowStartMinutes = 18 * 60;
@@ -95,6 +98,7 @@ constexpr int kNightWindowEndMinutes = 9 * 60;
 bool wifi_fast_connect_enabled = true;
 bool power_down_peripherals_before_sleep = true;
 bool battery_monitor_enabled = true;
+bool battery_protection_enabled = true;
 int8_t battery_adc_pin = 1;  // BAT_ADC: A0 / GPIO1
 int8_t battery_adc_enable_pin = 6;  // ADC_EN: D5 / GPIO6
 bool battery_adc_enable_active_high = true;
@@ -484,8 +488,11 @@ void enterDeepSleepForSeconds(const char *trigger, uint32_t sleep_seconds);
 void enterDeepSleepUntilKey(const char *trigger);
 void drawDeepSleepScreen(LongSleepScreenKind kind,
                          const char *planned_wake_time);
+void drawBatteryWarningScreen(uint8_t battery_percent);
 void configureRtcWakePinForAnyLow(int gpio, const char *label);
 bool waitForWakePinsInactive(uint32_t timeout_ms);
+bool isBatteryProtectionRequired(uint8_t *battery_percent);
+void enforceBatteryProtectionIfNeeded(bool force_check);
 void ensureSetupServicesRunning();
 void registerServerRoutesIfNeeded();
 void configureTimezone();
@@ -564,6 +571,11 @@ struct DeviceStrings {
   const char *planned_wake_format;
   const char *mode_sleep_alarm;
   const char *mode_manual_wake;
+  const char *battery_warning_title;
+  const char *battery_warning_line1;
+  const char *battery_warning_line2;
+  const char *battery_warning_line3;
+  const char *battery_warning_line4;
 };
 
 constexpr DeviceStrings kDeviceStringsDe = {
@@ -580,6 +592,11 @@ constexpr DeviceStrings kDeviceStringsDe = {
     "Geplantes Aufstehen: %s",
     "Modus: Tiefschlaf mit Wecker",
     "Modus: Manuelles Wecken",
+    "Batteriewarnung:",
+    "Ladestand ist unter 20%.",
+    "USB-C-Kabel zum Laden",
+    "der Batterie anschliessen.",
+    "Eine Taste zum Aufwachen.",
 };
 
 constexpr DeviceStrings kDeviceStringsEn = {
@@ -596,6 +613,11 @@ constexpr DeviceStrings kDeviceStringsEn = {
     "Planned wake-up: %s",
     "Mode: Deep sleep with alarm",
     "Mode: Manual wake-up",
+    "Battery warning:",
+    "Charging level is below 20%.",
+    "Please connect a USB-C cable",
+    "to recharge the battery.",
+    "Press any button to wake up.",
 };
 
 uint8_t loadBootFailures() {
@@ -1841,9 +1863,15 @@ uint64_t buildWakeMask(DeviceMode mode) {
 
 void configureWakeSources(DeviceMode mode) {
   const uint64_t mask = buildWakeMask(mode);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
   esp_sleep_disable_ext1_wakeup_io(0);
   const esp_err_t err =
       esp_sleep_enable_ext1_wakeup_io(mask, ESP_EXT1_WAKEUP_ANY_LOW);
+#else
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT1);
+  const esp_err_t err =
+      esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
   if (err != ESP_OK) {
     LOG_ERROR("Wake mask setup failed: %d", static_cast<int>(err));
     return;
@@ -2669,6 +2697,45 @@ uint8_t batteryPercentFromMillivolts(uint32_t millivolts) {
   return 100;
 }
 
+bool isBatteryProtectionRequired(uint8_t *battery_percent) {
+  if (!battery_protection_enabled) {
+    return false;
+  }
+
+  const uint32_t battery_mv = readBatteryMillivolts();
+  if (battery_mv == 0) {
+    return false;
+  }
+
+  const uint8_t percent = batteryPercentFromMillivolts(battery_mv);
+  if (battery_percent != nullptr) {
+    *battery_percent = percent;
+  }
+  return percent < kBatteryProtectionThresholdPercent;
+}
+
+void enforceBatteryProtectionIfNeeded(bool force_check) {
+  static bool checked_once = false;
+  static uint32_t last_check_ms = 0;
+  const uint32_t now_ms = millis();
+  if (!force_check && checked_once &&
+      now_ms - last_check_ms < kBatteryProtectionCheckIntervalMs) {
+    return;
+  }
+
+  checked_once = true;
+  last_check_ms = now_ms;
+  uint8_t battery_percent = 0;
+  while (isBatteryProtectionRequired(&battery_percent)) {
+    LOG_ERROR("Battery protection active: %u%% below %u%% threshold",
+              static_cast<unsigned>(battery_percent),
+              static_cast<unsigned>(kBatteryProtectionThresholdPercent));
+    drawBatteryWarningScreen(battery_percent);
+    enterDeepSleepUntilKey("battery protection");
+    delay(250);
+  }
+}
+
 void drawWifiIcon(int16_t x, int16_t y) {
   // Draw upper arcs directly so the glyph does not depend on screen-edge
   // clipping when the content area is inset from the panel border.
@@ -3055,6 +3122,53 @@ void drawSetupScreen(SetupScreenKind kind) {
       snprintf(ip_line, sizeof(ip_line), "http://%s", ip.c_str());
       u8g2_for_gfx.drawUTF8(content.left, y, ip_line);
     }
+  } while (display.nextPage());
+}
+
+void drawBatteryWarningScreen(uint8_t battery_percent) {
+  const DeviceStrings &strings = deviceStrings();
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setTextWrap(false);
+    u8g2_for_gfx.setForegroundColor(GxEPD_BLACK);
+    u8g2_for_gfx.setBackgroundColor(GxEPD_WHITE);
+
+    const int16_t screen_w = display.width();
+    const int16_t screen_h = display.height();
+    const DisplayContentRect content =
+        makeDisplayContentRect(screen_w, screen_h);
+    int16_t y = content.top + 18;
+
+    u8g2_for_gfx.setFont(u8g2_font_helvB12_tf);
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.battery_warning_title);
+    y += 22;
+
+    u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.battery_warning_line1);
+    y += 16;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.battery_warning_line2);
+    y += 16;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.battery_warning_line3);
+    y += 18;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.battery_warning_line4);
+
+    char battery_str[8];
+    snprintf(battery_str, sizeof(battery_str), "%u%%",
+             static_cast<unsigned>(battery_percent));
+    const int16_t battery_text_w =
+        static_cast<int16_t>(u8g2_for_gfx.getUTF8Width(battery_str));
+    const int16_t battery_icon_w = 23;
+    const int16_t battery_icon_h = 10;
+    const int16_t battery_x =
+        content.right - battery_icon_w - battery_text_w - 6;
+    const int16_t battery_y = content.bottom - battery_icon_h - 4;
+    drawBatteryIcon(battery_x, battery_y, battery_percent);
+    u8g2_for_gfx.drawUTF8(battery_x + battery_icon_w + 4,
+                          content.bottom - 2,
+                          battery_str);
   } while (display.nextPage());
 }
 
@@ -4509,6 +4623,7 @@ void setup() {
     LOG_DEBUG("Cleared NVS config");
   }
   loadConfig();
+  enforceBatteryProtectionIfNeeded(true);
   loadWifiFastConnectHint();
   loadSelectedStationIndex();
   last_ntp_sync_epoch = loadLastNtpSyncEpoch();
@@ -4589,6 +4704,7 @@ void loop() {
   if (mode_changed) {
     resetSleepPlanningState();
   }
+  enforceBatteryProtectionIfNeeded(false);
   if (mode_changed && current_mode != DeviceMode::Sleep) {
     ensureSetupServicesRunning();
     woke_by_button = false;

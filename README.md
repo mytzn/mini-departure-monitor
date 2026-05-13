@@ -123,6 +123,7 @@ This project does **not** use an official SDK. It relies on the publicly accessi
 - Time display with regular NTP re-synchronization
 - Signal strength indicator
 - Battery percentage indicator
+- Battery protection warning below 20%
 - Power mode icon in the footer
 - Deep sleep support with multiple wake strategies
 - Boot failure handling that forces setup mode after repeated Wi-Fi failures
@@ -160,6 +161,14 @@ The EE04 hardware keys are used like this:
 - `SleepManual`
   - Device prefers long sleep
   - Manual interaction triggers a burst of shorter active refresh intervals
+
+Battery protection:
+
+- Enabled by default through `battery_protection_enabled`
+- When the measured battery level is below `20%`, the device shows a battery warning screen and enters deep sleep
+- Pressing any hardware key wakes the device
+- If the battery is still below `20%`, the warning is shown again and the device returns to deep sleep
+- If the battery is at or above `20%`, the normal wake behavior continues
 
 Current refresh interval range:
 
