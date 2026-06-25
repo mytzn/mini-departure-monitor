@@ -89,6 +89,7 @@ constexpr uint8_t kManualRefreshCountStep = 5;
 constexpr uint8_t kDefaultManualRefreshCount = 20;
 constexpr uint8_t kActiveIntervalBurstCount = 20;
 constexpr uint32_t kManualLongSleepSec = 24UL * 60UL * 60UL;
+constexpr uint32_t kWifiRetrySleepSec = 60UL * 60UL;
 constexpr uint8_t kBatteryProtectionThresholdPercent = 20;
 constexpr uint32_t kBatteryProtectionCheckIntervalMs = 60UL * 1000UL;
 constexpr char kDefaultNightSleepStart[] = "18:00";
@@ -370,6 +371,7 @@ struct DebouncedInputState {
 bool connectWiFi();
 bool waitForWiFiConnected(uint32_t timeout_ms);
 void drawSetupScreen(SetupScreenKind kind);
+void drawWifiFailureScreen();
 void updateSetupScreen(bool force_redraw);
 PowerMode sanitizePowerMode(int value);
 uint8_t sanitizeUpdateIntervalSec(int value);
@@ -486,6 +488,7 @@ void saveModeToRtc(DeviceMode mode);
 DeviceMode modeFromRtc(uint8_t value);
 void enterDeepSleepForSeconds(const char *trigger, uint32_t sleep_seconds);
 void enterDeepSleepUntilKey(const char *trigger);
+void enterWifiFailureDeepSleep();
 void drawDeepSleepScreen(LongSleepScreenKind kind,
                          const char *planned_wake_time);
 void drawBatteryWarningScreen(uint8_t battery_percent);
@@ -556,6 +559,7 @@ RTC_DATA_ATTR uint32_t rtc_last_sleep_seconds = 0;
 RTC_DATA_ATTR uint8_t rtc_force_ntp_sync_pending = 0;
 RTC_DATA_ATTR uint8_t rtc_mode_state = static_cast<uint8_t>(DeviceMode::Setup);
 RTC_DATA_ATTR uint8_t rtc_hold_sleep_active = 0;
+RTC_DATA_ATTR uint8_t rtc_wifi_retry_sleep_active = 0;
 
 struct DeviceStrings {
   const char *no_station;
@@ -565,6 +569,12 @@ struct DeviceStrings {
   const char *setup_wifi_format;
   const char *setup_password_format;
   const char *setup_open_browser;
+  const char *wifi_failure_title;
+  const char *wifi_failure_line1;
+  const char *wifi_failure_retry_bus;
+  const char *wifi_failure_retry_sleep;
+  const char *wifi_failure_setup;
+  const char *wifi_failure_auto_retry;
   const char *sleep_title;
   const char *sleep_wake_prefix;
   const char *sleep_wake_button;
@@ -586,6 +596,12 @@ constexpr DeviceStrings kDeviceStringsDe = {
     "WLAN: %s",
     "Passwort: %s",
     "Webseite im Browser aufrufen",
+    "Keine WLAN-Verbindung",
+    "Verbindung fehlgeschlagen.",
+    "Bus: erneut versuchen",
+    "Sleep: erneut versuchen",
+    "Setup: Einstellungen",
+    "Automatisch wieder in 1h",
     "Tiefschlaf",
     "Wecke mich mit dem",
     "Button",
@@ -607,6 +623,12 @@ constexpr DeviceStrings kDeviceStringsEn = {
     "WiFi: %s",
     "Password: %s",
     "Open the webpage in a browser",
+    "No WiFi connection",
+    "Connection failed.",
+    "Bus: retry now",
+    "Sleep: retry now",
+    "Setup: change settings",
+    "Auto retry in 1h",
     "Deep sleep",
     "Wake me with the",
     "button",
@@ -2043,6 +2065,18 @@ void enterDeepSleepUntilKey(const char *trigger) {
   LOG_ERROR("esp_deep_sleep_start returned unexpectedly");
 }
 
+void enterWifiFailureDeepSleep() {
+  current_mode = DeviceMode::Sleep;
+  saveModeToRtc(current_mode);
+  resetSleepPlanningState();
+  setup_screen_active = false;
+  rtc_wifi_retry_sleep_active = 1;
+  rtc_force_ntp_sync_pending = 0;
+  LOG_DEBUG("WiFi retry sleep armed for %lus",
+            static_cast<unsigned long>(kWifiRetrySleepSec));
+  enterDeepSleepForSeconds("wifi retry", kWifiRetrySleepSec);
+}
+
 bool updateModeSwitch(bool force_log) {
   static bool initialized = false;
   manual_hold_sleep_requested = false;
@@ -3122,6 +3156,37 @@ void drawSetupScreen(SetupScreenKind kind) {
       snprintf(ip_line, sizeof(ip_line), "http://%s", ip.c_str());
       u8g2_for_gfx.drawUTF8(content.left, y, ip_line);
     }
+  } while (display.nextPage());
+}
+
+void drawWifiFailureScreen() {
+  const DeviceStrings &strings = deviceStrings();
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    u8g2_for_gfx.setForegroundColor(GxEPD_BLACK);
+    u8g2_for_gfx.setBackgroundColor(GxEPD_WHITE);
+    const int16_t screen_w = display.width();
+    const int16_t screen_h = display.height();
+    const DisplayContentRect content =
+        makeDisplayContentRect(screen_w, screen_h);
+    int16_t y = content.top + 18;
+
+    u8g2_for_gfx.setFont(u8g2_font_helvB12_tf);
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_title);
+    y += 22;
+
+    u8g2_for_gfx.setFont(u8g2_font_7x13_tf);
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_line1);
+    y += 18;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_retry_bus);
+    y += 15;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_retry_sleep);
+    y += 15;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_setup);
+    y += 18;
+    u8g2_for_gfx.drawUTF8(content.left, y, strings.wifi_failure_auto_retry);
   } while (display.nextPage());
 }
 
@@ -4587,6 +4652,7 @@ void setup() {
     rtc_force_ntp_sync_pending = 0;
     rtc_mode_state = static_cast<uint8_t>(DeviceMode::Setup);
     rtc_hold_sleep_active = 0;
+    rtc_wifi_retry_sleep_active = 0;
     LOG_DEBUG("RTC power state reset");
   }
   current_mode = modeFromRtc(rtc_mode_state);
@@ -4597,7 +4663,22 @@ void setup() {
     LOG_DEBUG("Long deep-sleep wake detected (%lus), force NTP sync armed",
               static_cast<unsigned long>(rtc_last_sleep_seconds));
   }
-  applyModeFromWakeSource();
+  const bool woke_from_wifi_retry_sleep = rtc_wifi_retry_sleep_active != 0;
+  const bool wifi_retry_setup_requested =
+      woke_from_wifi_retry_sleep && wake_cause == ESP_SLEEP_WAKEUP_EXT1 &&
+      wasWokenByKey(kPinKeySetup);
+  if (woke_from_wifi_retry_sleep) {
+    if (wifi_retry_setup_requested) {
+      current_mode = DeviceMode::Setup;
+      LOG_DEBUG("WiFi retry sleep ended by setup key");
+    } else {
+      current_mode = DeviceMode::Sleep;
+      LOG_DEBUG("WiFi retry sleep ended by retry wake");
+    }
+    saveModeToRtc(current_mode);
+  } else {
+    applyModeFromWakeSource();
+  }
   force_ntp_sync_once = rtc_force_ntp_sync_pending != 0;
   woke_by_button = wasWokenByButton();
   woke_by_setup_key = wasWokenByKey(kPinKeySetup);
@@ -4646,6 +4727,7 @@ void setup() {
     LOG_DEBUG("Boot failures count=%u",
               static_cast<unsigned>(boot_failures));
   } else {
+    rtc_wifi_retry_sleep_active = 0;
     if (boot_failures != 0) {
       boot_failures = 0;
       saveBootFailures(0);
@@ -4654,21 +4736,32 @@ void setup() {
     LOG_DEBUG("No WiFi credentials saved; forcing setup screen");
   }
 
-  const bool connected = connectWiFi();
+  bool connected = false;
+  if (wifi_retry_setup_requested) {
+    rtc_wifi_retry_sleep_active = 0;
+    force_setup_screen = true;
+    LOG_DEBUG("WiFi retry setup requested; skipping STA reconnect");
+  } else {
+    connected = connectWiFi();
+  }
   if (connected) {
+    rtc_wifi_retry_sleep_active = 0;
     resetBootFailures();
     force_setup_screen = false;
     if (setup_services_active) {
       startMdnsIfNeeded();
     }
-  } else if (has_credentials) {
+  } else if (has_credentials && !wifi_retry_setup_requested) {
     if (boot_failures < 255) {
       boot_failures++;
       saveBootFailures(boot_failures);
     }
-    force_setup_screen = true;
-    LOG_ERROR("WiFi connect failed; staying in setup mode (attempt=%u)",
+    force_setup_screen = false;
+    LOG_ERROR("WiFi connect failed; entering retry sleep (attempt=%u)",
               static_cast<unsigned>(boot_failures));
+    drawWifiFailureScreen();
+    enterWifiFailureDeepSleep();
+    return;
   }
 
   if (force_setup_screen && current_mode == DeviceMode::Sleep) {

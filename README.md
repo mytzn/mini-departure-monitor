@@ -59,8 +59,8 @@ Typical use cases:
   - `MOSI`: `GPIO9`
 - Keys
   - `KEY1` station button: `GPIO2`
-  - `KEY2` sleep key: `GPIO3`
-  - `KEY3` setup key: `GPIO5`
+  - `KEY2` setup key: `GPIO3`
+  - `KEY3` sleep key: `GPIO5`
 - Battery sensing
   - `BAT_ADC`: `GPIO1`
   - `ADC_EN`: `GPIO6`
@@ -126,7 +126,7 @@ This project does **not** use an official SDK. It relies on the publicly accessi
 - Battery protection warning below 20%
 - Power mode icon in the footer
 - Deep sleep support with multiple wake strategies
-- Boot failure handling that forces setup mode after repeated Wi-Fi failures
+- Wi-Fi failure screen with hourly deep-sleep retry and direct setup entry
 
 ## Device Controls
 
@@ -142,14 +142,23 @@ The EE04 hardware keys are used like this:
 - `KEY1`: Bus icon 🚍
   - Sleep mode, while awake: cycle through configured stations
   - Deep-sleep wake: wake the device; if multiple stations are configured, the wake also advances to the next station
+  - Wi-Fi failure sleep: wake and retry Wi-Fi immediately
   - Setup mode, while awake: no dedicated action
-- `KEY2`: Moon icon ☾
+- `KEY2`: Settings icon ⚙️
+  - While awake: toggle between setup mode and sleep mode
+  - Deep-sleep wake: wake the device and toggle the mode on resume
+- `KEY3`: Moon icon ☾
   - Setup mode, while awake: switch to sleep mode
   - Sleep mode, while awake: enter indefinite deep sleep until a hardware key wakes the device
   - Deep-sleep wake: wake the device
-- `KEY3`: Settings icon ⚙️
-  - While awake: toggle between setup mode and sleep mode
-  - Deep-sleep wake: wake the device and toggle the mode on resume
+  - Wi-Fi failure sleep: wake and retry Wi-Fi immediately
+
+Wi-Fi failure handling:
+
+- If saved Wi-Fi credentials cannot connect, the device shows a failure screen and enters deep sleep for one hour.
+- `KEY1`/Bus and `KEY3`/Sleep wake the device and retry Wi-Fi immediately.
+- `KEY2`/Setup wakes the device into setup mode so the Wi-Fi settings can be changed.
+- Timer wake retries Wi-Fi automatically every hour until the connection succeeds or setup is opened.
 
 ## Power Modes
 
@@ -309,6 +318,7 @@ The firmware persists the following values in NVS:
 - Update interval
 - Night sleep start and end time
 - Boot failure counter
+- Wi-Fi retry sleep state
 - Last NTP synchronization timestamp
 - Wi-Fi channel/BSSID fast-connect hints
 
