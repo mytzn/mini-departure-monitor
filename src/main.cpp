@@ -4814,6 +4814,7 @@ void loop() {
   if (manual_hold_sleep_requested && current_mode == DeviceMode::Sleep &&
       !force_setup_screen) {
     resetSleepPlanningState();
+    drawDeepSleepScreen(LongSleepScreenKind::ManualAllDay, nullptr);
     enterDeepSleepUntilKey("manual key2");
     return;
   }
